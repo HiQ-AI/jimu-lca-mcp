@@ -18,4 +18,95 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod, 张三 memberKey)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getAllUnits
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, 34 unit groups
+```
+
+Observed unit groups (subset):
+
+| `id` | `name` (zh) | `description` (en) | unit count |
+|---|---|---|---|
+| 41639498714632197 | 质量 | Units of mass | 32 (kg / t / g / mg / Gg / ...) |
+| 41637653031342085 | 体积 | Units of volume | 32 (m3 / Nm3 / Sm3 / L / ml / 1000m3 / ...) |
+| 41636915308318725 | 能量 | Units of energy | 32 (MJ / TJ / kWh / MWh / GJ / ...) |
+| 41639739773603845 | 件数 | Units of items | 5 (unit / Item(s) / 瓶 / 双 / ...) |
+| 41639648388894725 | 功率（光伏）| Units of power (photovoltaic) | 2 (Wp / kWp) |
+| 41638138338004997 | 长度 | Units of length | 19 (km / m / dm / cm / mm / ...) |
+
+A couple of domain-specific groups (功率（光伏）, 件数) are not in the standard
+LCA unit taxonomy. Don't assume "if it's not in the group list, it's
+invalid" — surface them all.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true,
+  "code": "200",
+  "message": "成功",
+  "data": [
+    {
+      "id": "41639498714632197",       // group id (Long stringified)
+      "uuid": "16701a8b-...",          // also a stable id
+      "name": "质量",                  // zh name
+      "description": "Units of mass",  // en description
+      "referenceUnit": "41639498723282949",  // id of the standard unit
+      "createTime": "2025-03-03",
+      "lastChangeTime": "2025-03-04",
+      "isDeleted": 0,
+      "unitList": [
+        {
+          "id": "41639498723282949",   // unit id
+          "name": "kg",                // canonical unit symbol
+          "uuid": "d3383ee4-...",
+          "synonyms": "kilogram;千克",  // semicolon-separated aliases (en;zh)
+          "conversionFactor": "1",     // multiplier to the group's reference unit
+          "description": "千克",        // zh description (unit-level)
+          "unitGroup": "16701a8b-...", // back-pointer to group uuid (not group id)
+          "createTime": "2025-03-03",
+          "isShow": 1,                 // visible in UI
+          "isStandard": 1              // the group's reference unit (only one per group)
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}
+```
+
+### Quirks
+
+- `conversionFactor` is a **string** even though it's numerically a decimal —
+  parse it as Decimal/float at the MCP layer, don't pass through as string to
+  LLM math.
+- The `id` fields are stringified Longs (Snowflake-ish). Keep as strings —
+  JSON 64-bit precision loss has historically bitten this kind of API.
+- `unitGroup` in a unit row references the group's `uuid`, not its `id`. The
+  two are independent identifiers; the API mixes them.
+- `isStandard=1` means "this is the group's reference unit". `referenceUnit`
+  at the group level is the **id** (not uuid) of that unit. Cross-check both
+  on round-trip.
+
+### MCP tool mapping
+
+Single tool, no aggregation:
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_units() -> str:
+    """Return all unit groups and their units. Reference data — call once per
+    session, cache the result. The `conversionFactor` on each unit is the
+    multiplier to convert that unit into the group's reference unit (the unit
+    with `isStandard=1`)."""
+    ...
+```
+
+Cache: TTL 1 hour at module level. The unit catalog changes rarely.
+
+Output to LLM: render as nested markdown tree, not raw JSON — the agent reads
+this to pick the right unit when filling a data item.

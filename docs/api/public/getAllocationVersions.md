@@ -18,4 +18,53 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod, 张三 memberKey)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getAllocationVersions
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, 5 background DB versions
+```
+
+Observed list:
+
+| `id` | `version` | `uuid` | `description` |
+|---|---|---|---|
+| 41523741825687557 | Ecoinvent3.10+HiQ1.2 | 613e4ef2-dcc5-... | 合并了 Ecoinvent3.10 和 HiQ1.2 的综合数据库，未做去重处理 |
+| 41712481948418053 | Ecoinvent3.10 | 117f438e-19dd-... | Ecoinvent3.10 版本 |
+| 47663361112772613 | Ecoinvent3.11 | 9653173e-a03b-... | Ecoinvent3.11 版本 |
+| 47684735954251781 | Ecoinvent3.12 | f2ee17eb-dfc1-... | Ecoinvent3.12 版本 |
+| 48932530878033925 | Ecoinvent3.12+HiQ1.4.0 | 9a1d4fd6-3231-... | 合并了 Ecoinvent3.12 和 HiQ1.4.0 的综合数据库 |
+
+### Why this matters
+
+- The `id` returned here is the `versionId` parameter that **must** be passed
+  to `getAssignedCalculationMethods` (see that endpoint's doc — upstream docs
+  do not mention this requirement, but smoke shows it errors with
+  `versionId不能为空` if omitted).
+- A given memberKey may not have access to all 5 versions in practice — the
+  list is filtered by what's "allocated" to this tenant. Don't hardcode any
+  versionId on the client side.
+- Versions are immutable snapshots — `Ecoinvent3.12+HiQ1.4.0` is a different
+  resource from `Ecoinvent3.10+HiQ1.2`, not a newer "version" in the
+  package-version sense. Pick the right one per LCA case.
+
+### Response shape (verified)
+
+Matches upstream doc exactly, including `createTime`. No quirks observed.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_background_db_versions() -> str:
+    """List background-database versions this memberKey can use (Ecoinvent
+    3.10 / 3.11 / 3.12 / HiQ-combined variants). Each `id` is a `versionId`
+    that calculation-method lookup, calc submission, and most downstream LCA
+    operations require. Pick a version once per LCA case; mixing versions
+    inside one case is not supported."""
+    ...
+```
+
+Same caching hint as `getAllUnits` — reference data, cache 1 hour at module
+level.

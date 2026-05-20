@@ -18,4 +18,80 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod, 张三 memberKey)
+
+```
+# Without versionId — errors
+GET https://open.ecdigit.com/openapi/lca/v3/getAssignedCalculationMethods
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ {"success":false,"code":"500","message":"versionId不能为空"}
+
+# With versionId — works
+GET https://open.ecdigit.com/openapi/lca/v3/getAssignedCalculationMethods?versionId=41523741825687557
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, 45 LCIA methods for Ecoinvent3.10+HiQ1.2
+```
+
+### Required param chain
+
+The agent must call `getAllocationVersions` first to obtain a `versionId`,
+then pass it here. The docs *do* mention this in the "请求参数" table
+(my earlier note in tools.md saying "docs lie about params" was wrong —
+the param IS documented, just in a separate table from the request-header
+table). Still worth surfacing in the MCP tool signature so the LLM doesn't
+forget.
+
+### Observed method catalog (Ecoinvent3.10+HiQ1.2, 45 methods)
+
+The full list is too long for this doc; representative names:
+
+- `CISA-EPD PCR (Basic and Special Steel Products)` — China steel EPD
+- `EN15804 (EF v3.1 EN15804+资源指标) - 仅适用于EN15804系统模型` — EU EPD
+- `EN15804 (EF v3.0 EN15804+资源指标) - 仅适用于EN15804系统模型`
+- `EF v3.0 EN15804` / `EF v3.1 EN15804` — bare EF
+- `EN15804资源指标` — resource indicators
+- `USEtox v2.13, midpoint` / `USEtox v2.13, midpoint no LT` — toxicity
+- ...(38 more, including IPCC GWP100, ReCiPe, CML, etc.)
+
+Method `name` is the agent-facing label; `id` is what subsequent
+`addCaseCalculationTask` / `getCaseLciaDetails` need.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "41794833658720261",       // methodId
+      "uuid": "afa887a6-...",
+      "name": "CISA-EPD PCR (Basic and Special Steel Products)",
+      "version": "613e4ef2-...",       // back-pointer to version UUID
+      "category": "03bc4b1a-...",      // shared category id (all 45 share it for this DB)
+      "orderNo": 134,                  // display order in UI
+      "enable": "1",                   // available to this tenant
+      "versionId": "41523741825687557", // echo of the query param
+      "versionName": "Ecoinvent3.10+HiQ1.2"
+    },
+    ...
+  ]
+}
+```
+
+`category` is the same UUID for every method in a given DB version (at least
+on the smoked sample) — looks like an internal grouping, probably unused.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_calculation_methods(
+    version_id: Annotated[str, "Background DB version id, from list_background_db_versions"],
+) -> str:
+    """List LCIA calculation methods available under the given background-DB
+    version. Used to pick the `method_id` for calculate_case / get_lcia_detail.
+    Call list_background_db_versions first to get a valid version_id."""
+    ...
+```
+
+Caching: per-`version_id` keyed cache, TTL 1 hour. Method lists rarely change.

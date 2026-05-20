@@ -16,7 +16,7 @@ Cortex agent. Status legend:
 |---|---|---|
 | 📖 `get_units` | `GET /lca/v3/getAllUnits` | Unit groups (mass, energy, ...) and each group's unit list. Reference data the agent uses when reading / writing exchange values. |
 | 📖 `list_background_db_versions` | `GET /lca/v3/getAllocationVersions` | Background database versions (Ecoinvent 3.10 / 3.11 / HiQ 1.2 / combined). Returns `versionId` needed by `list_calculation_methods` and `addCaseCalculationTask`. |
-| 📖 `list_calculation_methods(version_id)` | `GET /lca/v3/getAssignedCalculationMethods` | LCIA methods (e.g. IPCC GWP100, CML-IA, etc.) available to the tenant under a given background DB version. **Docs lie about params** — the endpoint requires `versionId` as a query string even though the docs table doesn't list it. |
+| 📖 `list_calculation_methods(version_id)` | `GET /lca/v3/getAssignedCalculationMethods` | LCIA methods (e.g. IPCC GWP100, CML-IA, etc.) available to the tenant under a given background DB version. `versionId` is required (it sits in the "请求参数" sub-table separately from the "请求头" table). |
 
 ### Space management — read only (2 / 7 upstream endpoints — 5 writes deferred to web UI)
 
@@ -84,9 +84,12 @@ Cortex agent. Status legend:
   first, then submit. If the MCP exposes both separately, agents will skip the
   prefetch and submit with empty disposals — a silent-failure shape we've seen
   repeatedly with editor-mcp.
-- **Hide schema quirks at the boundary.** `getAssignedCalculationMethods`
-  requires `versionId` as a query param even though the published docs don't
-  list it. Wrapping it means the agent doesn't have to know.
+- **Make required-param chains obvious from the signature.** E.g. the agent
+  can't call `getAssignedCalculationMethods` without first calling
+  `getAllocationVersions` to obtain a `versionId`. Reflecting that in the
+  Python signature (`list_calculation_methods(version_id: str)`) is clearer
+  than the raw HTTP shape where the dependency is documented but easy to
+  overlook.
 
 ## Aggregation tradeoffs
 
