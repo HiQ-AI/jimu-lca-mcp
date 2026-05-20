@@ -1,56 +1,99 @@
 # jimu-lca-mcp
 
-Local stdio MCP server + skill that lets a Cortex / Claude Code agent drive
-the **积木LCA 3.0** product-carbon-footprint workspace
-(https://cloud.ecdigit.com/jimulca) via the 易碳云开放平台 REST API.
+MCP server and companion CLI for the **积木LCA 3.0** product-carbon-footprint
+workspace on 易碳云开放平台 (<https://cloud.ecdigit.com/jimulca>).
 
-Sibling-but-independent to [editor-mcp-server](https://github.com/KirbyInGitHub/editor-mcp-server)
-(which writes background LCI datasets on `editor.hiqlcd.com`). The two products
-are complementary — `editor-mcp-server` *produces* background data, `jimu-lca-mcp`
-*consumes* it to compute product carbon footprints.
+**Built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)** —
+an AI-powered LCA data workbench that orchestrates product carbon footprinting
+across an LCA practitioner's working day. Because it speaks the standard MCP
+stdio protocol, it also runs unmodified against any other MCP-capable agent
+host (Claude Code, OpenAI Codex, Cursor, Continue, …). The same Python package
+ships a `jimu-lca` CLI for scripted use, smoke tests, and operators who don't
+want to wire up an agent.
+
+Sibling-but-independent to [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
+which authors background LCI datasets on `editor.hiqlcd.com`. The two
+products are complementary — `editor-mcp-server` *produces* background
+data; this repo *consumes* that data to compute product carbon footprints.
 
 ## Status
 
 **Phase 0 — investigation and documentation.** No runtime code yet. The repo
 currently exists to:
 
-1. Catalog the 易碳开放平台 API surface for 积木LCA 3.0 (37 endpoints — 5
+1. Catalog the 易碳云开放平台 API surface for 积木LCA 3.0 (37 endpoints — 5
    admin / bootstrap, 32 LCA-runtime)
 2. Capture design decisions: which endpoints to wrap, which to aggregate, which
-   to leave to web UI
-3. Document the auth model, env model, and Cortex Desktop integration shape
+   to leave to the web UI
+3. Document the auth model, env model, and host-integration shape (including
+   a Settings-UI pattern for desktop hosts)
 4. Document each endpoint's request / response schema, gotchas, and proposed
    MCP tool mapping
 
-Coding begins only after the docs are complete and gaps are closed.
+Coding begins after the docs settle and the open questions in
+`docs/architecture/non-goals.md` are closed.
 
 ## Architecture (TL;DR)
 
-- **Local stdio MCP**, spawned by Cortex Desktop's claude-agent-sdk (the same
-  pattern as Cowork's child-process MCPs). **No** K3s deployment, **no** APISIX
-  gateway — 积木LCA's `appId: app:xxx` auth doesn't share a tenant with
-  `hiqlcd.com`, so the editor-mcp's gateway pattern doesn't apply here.
-- Auth = single env var `JIMU_LCA_MEMBER_KEY` (`app:xxxxxxxxxx`). One memberKey
-  per Cortex user; users get theirs from the 易碳 open platform admin.
-- Companion skill `jimu-lca-product-carbon` in cortex-skills sits next to
-  `hiq-editor` and `upr-integrated-flow` as the third LCA-domain skill.
+- **Local stdio MCP**, spawned by the agent host as a child process. **No** K3s
+  deployment, **no** API gateway — 积木LCA's `appId: app:xxx` auth doesn't
+  share a tenant with any SSO an agent host might natively integrate with, so
+  a remote-HTTP gateway pattern wouldn't add value here.
+- **Companion `jimu-lca` CLI** in the same package — same operations as the
+  MCP tools, exposed as subcommands for scripts, smoke tests, and operator
+  workflows. Useful when there's no agent in the loop.
+- **Auth** = single env var `JIMU_LCA_MEMBER_KEY` (value `app:xxxxxxxxxx`).
+  One memberKey per end user; obtained from the open-platform admin console.
+- **Companion skill** `jimu-lca-product-carbon` (under construction) for hosts
+  that support the [Anthropic skill format](https://github.com/anthropics/claude-cookbooks),
+  documenting the product-LCA workflow on top of these tools.
 
 Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
 
-## What this server does NOT cover
+## What this MCP / CLI does NOT cover
 
-- The 5 bootstrap / admin endpoints (`registMember`, `queryMemberKey`,
+- **The 5 bootstrap / admin endpoints** (`registMember`, `queryMemberKey`,
   `memberToken/*`, `role/listByCompany`). Those operate on a company-level
   appkey, not a user-level memberKey, and run **once per tenant**. They live
-  with the admin who provisions Cortex for a 易碳 customer, not with the runtime
-  MCP. See [docs/architecture/non-goals.md](docs/architecture/non-goals.md).
-- Space membership write operations (`addProjectSpace`,
+  with the integrator who provisions access for an end user, not with the
+  runtime MCP/CLI. See
+  [docs/architecture/non-goals.md](docs/architecture/non-goals.md).
+- **Space membership write operations** (`addProjectSpace`,
   `addMemberToSpaceBatch`, `deleteMemberFromSpaceBatch`, role updates). These
-  are admin actions a Cortex user does in the 积木LCA web UI; the MCP only
+  are governance actions an end user performs in the web UI; the MCP only
   reads space lists / membership.
-- Bearer JWT acquisition (`memberToken/get`, `memberToken/refresh`). The
-  memberKey is the long-lived credential; short-lived JWTs are only needed
-  for SaaS-UI redirects, which Cortex doesn't do from the agent.
+- **Bearer JWT lifecycle endpoints** (`memberToken/get`, `memberToken/refresh`).
+  The memberKey is the long-lived credential; short-lived JWTs are only
+  needed for SaaS-UI redirects, which an agent doesn't drive directly.
+
+## Quickstart (planned, not yet shipped)
+
+```bash
+# MCP host config — e.g. claude_desktop_config.json
+{
+  "mcpServers": {
+    "jimu-lca": {
+      "command": "uvx",
+      "args": ["--from", "jimu-lca-mcp@latest", "jimu-lca-mcp-server"],
+      "env": {
+        "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+```bash
+# CLI usage — same operations, scripted
+export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
+uvx --from jimu-lca-mcp@latest jimu-lca units
+uvx --from jimu-lca-mcp@latest jimu-lca versions
+uvx --from jimu-lca-mcp@latest jimu-lca products list --space <space-id>
+uvx --from jimu-lca-mcp@latest jimu-lca case overview <case-id>
+```
+
+CLI surface mirrors the MCP tool surface 1:1; same parameter names, same
+response semantics. See [docs/architecture/tools.md](docs/architecture/tools.md).
 
 ## Layout
 
@@ -59,25 +102,30 @@ jimu-lca-mcp/
 ├── README.md
 ├── docs/
 │   ├── architecture/
-│   │   ├── overview.md          # auth model, env, Cortex integration, threat model
+│   │   ├── overview.md          # auth / env / host integration / Settings-UI pattern
 │   │   ├── non-goals.md         # what we don't wrap and why
-│   │   └── tools.md             # 32 raw endpoints → 22 MCP tools mapping
+│   │   └── tools.md             # 32 endpoints → 22 MCP tool / CLI subcommand mapping
 │   ├── api/                     # one .md per endpoint (32 LCA + 5 admin)
 │   │   ├── README.md            # index
 │   │   ├── public/getAllUnits.md
-│   │   ├── public/getAllocationVersions.md
 │   │   └── ...
-│   └── api-raw/                 # raw JSON from openResource/getById, source of truth
-├── jimu_lca_mcp/                # package (empty until coding starts)
-└── tests/                       # (empty until coding starts)
+│   └── api-raw/                 # raw openResource/getById JSONs, source of truth
+├── jimu_lca_mcp/                # Python package (empty until Phase 1)
+│   ├── server.py                # MCP stdio entry
+│   ├── cli.py                   # CLI entry
+│   └── ...
+└── tests/                       # (empty until Phase 1)
 ```
 
 ## Reading order
 
-1. [docs/architecture/overview.md](docs/architecture/overview.md) — auth, env, integration
-2. [docs/architecture/non-goals.md](docs/architecture/non-goals.md) — what we skip
-3. [docs/architecture/tools.md](docs/architecture/tools.md) — proposed tool surface
-4. [docs/api/README.md](docs/api/README.md) — per-endpoint details
+1. [docs/architecture/overview.md](docs/architecture/overview.md) — auth, env,
+   host integration patterns, Settings-UI design
+2. [docs/architecture/non-goals.md](docs/architecture/non-goals.md) — what we
+   skip and why
+3. [docs/architecture/tools.md](docs/architecture/tools.md) — 22-entry tool /
+   CLI subcommand surface
+4. [docs/api/README.md](docs/api/README.md) — per-endpoint deep dives
 
 ## License
 

@@ -18,7 +18,7 @@
 
 ## Integration notes
 
-### Smoke (2026-05-21, prod, 张三 memberKey)
+### Smoke (2026-05-21, prod)
 
 ```
 # Without versionId — errors
