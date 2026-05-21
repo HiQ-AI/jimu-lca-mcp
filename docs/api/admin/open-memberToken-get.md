@@ -18,4 +18,11 @@
 
 ## Integration notes
 
-_(not yet documented)_
+**Not wrapped (see [non-goals.md](../../architecture/non-goals.md)).**
+
+Returns a short-lived Bearer JWT — useful only for SaaS-UI redirects (e.g. opening the case in the web app). The agent uses the long-lived memberKey directly as the `appId` header for all LCA endpoints; no JWT in the loop.
+
+The contract above stays in this file as a reference catalog entry —
+useful if a Cortex use case ever forces re-evaluating the exclusion
+(see the "What changes this list" section of non-goals.md). For now,
+this endpoint has no MCP tool and no companion CLI subcommand.

@@ -18,4 +18,11 @@
 
 ## Integration notes
 
-_(not yet documented)_
+**Not wrapped (see [non-goals.md](../../architecture/non-goals.md)).**
+
+Workspace creation is a one-off configuration step the user does in the web UI. The agent never needs to create spaces.
+
+The contract above stays in this file as a reference catalog entry —
+useful if a Cortex use case ever forces re-evaluating the exclusion
+(see the "What changes this list" section of non-goals.md). For now,
+this endpoint has no MCP tool and no companion CLI subcommand.
