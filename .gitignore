@@ -7,6 +7,10 @@ build/
 .pnpm-store/
 .npm/
 
+# Wrangler / Cloudflare Worker local state + build cache
+.wrangler/
+.dev.vars
+
 # Env / secrets
 .env
 .env.*
