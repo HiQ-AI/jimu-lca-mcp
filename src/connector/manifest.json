@@ -7,7 +7,7 @@
     "url": "https://hiq.earth"
   },
   "version": "0.1.0-alpha.1",
-  "connector_url": "https://jimulca-mcp.hiq.earth/mcp",
+  "connector_url": "https://jimu-lca-mcp.hiq.earth/mcp",
   "transport": "streamable-http",
   "auth": {
     "type": "credential",

@@ -1,33 +1,26 @@
 # Cloudflare Worker config for jimu-lca-mcp HTTP transport.
-# Deploy:    npm run worker:deploy
-# Dev:       npm run worker:dev (binds at http://localhost:8787)
+# Deploy:    npm run worker:deploy   (or auto via CF Workers Builds on push to main)
+# Dev:       npm run worker:dev      (binds at http://localhost:8787)
 
-name = "jimulca-mcp"
+name = "jimu-lca-mcp"
 main = "dist/worker.js"
 compatibility_date = "2025-05-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
+
+# Custom domain — CF auto-creates the DNS record because the hiq.earth zone
+# is already on Cloudflare. After the first successful deploy this URL is
+# the canonical Connector endpoint:
+#   https://jimu-lca-mcp.hiq.earth/mcp
+routes = [
+  { pattern = "jimu-lca-mcp.hiq.earth", custom_domain = true }
+]
+
+[vars]
+JIMU_LCA_ENV = "prod"
 
 # The Worker never calls keychain APIs — auth comes from the request header.
 # Alias keytar to a no-op shim so wrangler's bundler doesn't try to ship the
 # native .node binary.
 [alias]
 keytar = "./dist/_shims/keytar-worker.js"
-
-# Production environment — custom domain wired via the CF dashboard.
-[env.production]
-name = "jimulca-mcp-prod"
-# Uncomment when the custom domain is configured:
-# routes = [
-#   { pattern = "jimulca-mcp.hiq.earth/*", custom_domain = true }
-# ]
-
-[env.production.vars]
-JIMU_LCA_ENV = "prod"
-
-# Dev environment for local + Workers dev URL.
-[env.dev]
-name = "jimulca-mcp-dev"
-
-[env.dev.vars]
-JIMU_LCA_ENV = "dev"

@@ -11,8 +11,8 @@ covers three deliverables in **one shared codebase**:
    (or a shell script) can call `jimu-lca list-products --space=xxx
    --json` and parse the result. v0 is **not** an agent-in-a-CLI; the
    agent-native chat variant is Phase 2 (see "CLI evolution" below).
-3. **`jimulca-mcp` Cloudflare Worker — HTTP MCP server.** Hosted at
-   `https://jimulca-mcp.hiq.earth/mcp` (planned hostname). What Cortex
+3. **`jimu-lca-mcp` Cloudflare Worker — HTTP MCP server.** Hosted at
+   `https://jimu-lca-mcp.hiq.earth/mcp` (planned hostname). What Cortex
    Desktop's future **Connector** directory points at; same wire
    protocol as the stdio server, different transport.
 
@@ -273,7 +273,7 @@ export default {
 };
 ```
 
-Deploy: `wrangler deploy`. Custom domain `jimulca-mcp.hiq.earth`
+Deploy: `wrangler deploy`. Custom domain `jimu-lca-mcp.hiq.earth`
 configured via the Cloudflare dashboard (CNAME or Worker route).
 
 Worker characteristics:
@@ -333,7 +333,7 @@ Cortex (or Claude Desktop / any directory) expects:
     "url": "https://hiq.earth"
   },
   "version": "0.1.0",
-  "connector_url": "https://jimulca-mcp.hiq.earth/mcp",
+  "connector_url": "https://jimu-lca-mcp.hiq.earth/mcp",
   "transport": "http+sse",
   "auth": {
     "type": "credential",
@@ -415,7 +415,7 @@ prove out, Phase 2 lands incrementally.
   `{ "error": {...} }` to stdout (good for piping) or stderr (good for
   human shells)? Plan: stderr by default, `--errors-as-json` flag for
   pipe-friendly mode.
-- **Custom domain on Cloudflare** — `jimulca-mcp.hiq.earth` requires
+- **Custom domain on Cloudflare** — `jimu-lca-mcp.hiq.earth` requires
   the `hiq.earth` zone to be on Cloudflare. Already there per
   [[reference_cloudflare_proxy_decision]], just need the CNAME +
   Worker route.
