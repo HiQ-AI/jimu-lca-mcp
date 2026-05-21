@@ -18,4 +18,68 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getProcessList?stageId=<stage-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, list of processes
+```
+
+### Doc quirk — keyed by `stageId`, not `caseId`
+
+Despite returning processes that conceptually "belong to a case", the
+endpoint takes only `stageId`. The agent must call `getCaseStage` first
+to get the stage list, then loop and call this per stage.
+
+This is the second reason `get_case_overview` exists: walking the
+case → stages → processes structure requires O(stages) calls. Folding
+into one server-side aggregator turns N+2 round trips into 1.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "51677310255788037",       // processId — needed by getCaseDisposals child rows
+      "uuid": "...",
+      "name": "机车生产",                // process display name
+      "caseId": "51677239114649605",
+      "stageId": "51677310254215173",
+      "categoryId": "15889430040788992",
+      "categoryName": "主工序",          // process category (主工序 / 副产品 / 处置 / 运输 / …)
+      "orderId": 1                      // ordering within the stage
+    }
+  ]
+}
+```
+
+### `categoryName` values to expect
+
+Smoked one process with `主工序` (main process). Per the upstream model
+docs, process categories include:
+
+- `主工序` — main production step
+- `副产品工序` — co-product processing
+- `废弃物处置工序` — disposal / waste handling
+- `运输工序` — transport
+- (custom categories the tenant has defined)
+
+The aggregator should preserve `categoryName` so the agent can scope
+"give me only the disposal processes in this stage".
+
+### Quirks
+
+- `orderId` here is **process order within a stage**, not global.
+- Empty list = stage exists but has no processes attached yet. Surface
+  as empty array, not null.
+
+### MCP tool mapping
+
+**Folded into `get_case_overview`**. The aggregator fans out one
+`getProcessList` per stage returned by `getCaseStage`, attaches the
+process arrays under each stage in the merged response.
+
+Not exposed as a standalone tool.

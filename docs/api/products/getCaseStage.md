@@ -18,4 +18,55 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getCaseStage?caseId=<case-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, list of stages
+```
+
+LCA cases are organised into **life-cycle stages** (原材料生产与制造 /
+使用阶段 / 报废与回收 / etc.). Each stage holds its own set of
+processes; `getProcessList` is keyed by `stageId`, not `caseId` — so the
+agent must walk this list first to find the stages it wants to drill into.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "51677310254215173",        // stageId — what getProcessList / getDataConfigurationList consume
+      "uuid": "...",
+      "name": "原材料生产与制造阶段",
+      "caseId": "51677239114649605",    // back-pointer
+      "orderId": 2,                     // display order — note: smoked case had orderId=2 for its only stage
+      "key": "..."                      // not documented; appears in response
+    }
+  ]
+}
+```
+
+### Quirks
+
+- `orderId` is **not** zero-indexed and is **not** guaranteed
+  contiguous. The smoked case had a single stage with `orderId=2`. Sort
+  by `orderId` when rendering; don't assume the value means anything
+  beyond ordering.
+- `key` is in the response but not in the upstream docs — possibly an
+  internal stage-template-key (`materials` / `use` / `eol` etc.). Surface
+  raw, don't depend on its value.
+- Smoked case had **1 stage**. LCA cases with cradle-to-gate boundaries
+  often have just 1; cradle-to-grave can have 3-5. Don't optimise for
+  single-stage.
+
+### MCP tool mapping
+
+**Folded into `get_case_overview`** — see
+[../../architecture/tools.md](../../architecture/tools.md). The aggregator
+calls this to discover the stage list, then fans out to `getProcessList`
+per stage.
+
+Not exposed as a standalone tool.

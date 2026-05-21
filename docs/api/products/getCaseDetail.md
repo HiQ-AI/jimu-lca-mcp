@@ -18,4 +18,69 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getCaseDetail?id=<case-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, single case object (19 fields)
+
+# Without id → {"success":false,"code":"500","message":"id不能为空"}
+```
+
+### Doc quirk — the param name is `id`, not `caseId`
+
+Upstream prose calls this value "lcaID", but the actual query param is
+`id`. Trying `caseId=<x>` errors with `id不能为空`. The MCP signature
+should take a friendly name (`case_id`) and remap internally — agents
+think in "case id" semantics, the endpoint just happens to use `id` on
+the wire.
+
+### Response duplicates the `lcaBrandCases` row from `getBrandInfo`
+
+The 19 fields here mirror exactly what's already nested in
+`getBrandInfo.data.lcaBrandCases[]`. If the agent already called
+`get_product(brand_id)` it has the case row in `lcaBrandCases` — no
+extra call needed. This endpoint is the canonical entry when the agent
+has only a case_id and didn't list the parent product first.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": {
+    "id": "51677239114649605",
+    "uuid": "e5d2b416-...",
+    "brandId": "51677239113863173",       // back-pointer to product
+    "reportDate": "2026-01~2026-05",
+    "boundaryId": "1519532547259908121",
+    "boundaryName": "摇篮到大门",
+    "unitId": "41639739781206021",
+    "unitName": "kg",
+    "unitComment": "<declared unit comment>",
+    "consultProductName": "<reference product>",
+    "consultProductCoefficient": "1",
+    "status": "158894365086199856",
+    "statusName": "待计算",
+    "description": "",
+    "orderNum": 1,
+    "unitType": "1621385735695621126",
+    "unitTypeName": "功能单位",
+    "versionId": "41712481948418053",     // background DB version used
+    "versionName": "Ecoinvent3.10"
+  }
+}
+```
+
+### MCP tool mapping
+
+**Folded into `get_case_overview`** — see
+[../../architecture/tools.md](../../architecture/tools.md). The aggregator
+calls this endpoint first, then enriches with `getCaseStage`,
+`getProcessList`, `getCaseDisposals`, and a first page of
+`getDataConfigurationList`, returning the merged structure in one shot.
+
+Not exposed as a standalone tool — its data is wholly contained in the
+aggregator's output, and exposing it separately would tempt the agent to
+make duplicate calls.

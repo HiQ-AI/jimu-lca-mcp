@@ -42,7 +42,7 @@ Cortex agent. Status legend:
 | ✍️ `create_product(...)` | `POST /lca/v3/addBrand` | Creates a product "brand". One per product line. |
 | 📖 `list_products(space_id, page, ...)` | `POST /lca/v3/getBrandPage` | Paginated product list scoped to a space. |
 | 📖 `get_product(brand_id)` | `GET /lca/v3/getBrandInfo` | Product metadata (name, description, units, ...). |
-| 🧩📖 `get_case_overview(case_id)` | `getCaseDetail` + `getCaseStage` + `getProcessList` + `getDataConfigurationList` + `getCaseDisposals` | **Aggregator** — five upstream calls fused into one response so the LLM gets a full case picture (metadata, life-cycle stages, processes, data configs, products + disposals) in one shot. |
+| 🧩📖 `get_case_overview(case_id)` | `getCaseDetail` + `getCaseStage` + N × `getProcessList` + N × `getDataConfigurationList(page=1, size=200)` + `getCaseDisposals` | **Aggregator** — N+3 upstream calls (where N = number of life-cycle stages) fused into one response so the LLM gets the full case picture in one shot. See the aggregator shape below. |
 | ⏸ `get_data_config(config_id)` | `POST /lca/v3/getDataConfigurationDetail` | Single config drill-down. Kept separate from `get_case_overview` because it can be heavy; the agent calls it after deciding which config matters. |
 | ✍️ `copy_case(case_id)` | `POST /lca/v3/copyCase` | Clone an existing LCA case (e.g. to model a variant). |
 | ✍️ `delete_case(case_id)` | `POST /lca/v3/deleteCase` | Soft-delete an LCA case. |
@@ -71,6 +71,94 @@ Cortex agent. Status legend:
 | Tool | Upstream | Notes |
 |---|---|---|
 | ⏸ ✍️ `submit_uncertainty_analysis(...)` | `POST /lca/v3/submitUncertaintyAnalysis` | Monte Carlo / uncertainty calc trigger. Async — need to clarify polling. |
+
+## `get_case_overview` aggregator shape
+
+The agent calls `get_case_overview(case_id="<id>")` once; the server runs
+N+3 upstream calls in parallel where possible, joins on stageId, and
+returns a single merged structure:
+
+```python
+{
+  "case": {
+    # from getCaseDetail (id=case_id)
+    "id": "...", "uuid": "...", "name": "...",  # `name` joined from getBrandInfo
+    "brand_id": "...", "brand_name": "...",     # joined from getBrandInfo
+    "status": "待计算",                          # statusName
+    "boundary": "摇篮到大门",
+    "version": {"id": "...", "name": "Ecoinvent3.10"},  # versionId+versionName
+    "declared_unit": {"id": "...", "name": "kg", "comment": "..."},
+    "report_date": "2026-01~2026-05",
+    "description": "...",
+  },
+  "stages": [
+    {
+      # from getCaseStage
+      "id": "...", "name": "原材料生产与制造阶段", "order_id": 2,
+      "processes": [
+        # from getProcessList(stageId=stage.id)
+        {
+          "id": "...", "name": "机车生产",
+          "category": "主工序",
+          "order_id": 1,
+        }
+      ],
+      "products_and_disposals": [
+        # joined from getCaseDisposals (children of this stage)
+        {
+          "id": "...", "name": "机车",
+          "category": "产品",         # 产品 / 副产品 / 废弃物
+          "process_id": "...", "process_name": "机车生产",
+          "unit": "kg",
+        }
+      ],
+      "data_items": {
+        # from getDataConfigurationList(caseId, stageId, page=1, size=200)
+        "total_loaded": 5,
+        "rows": [
+          {
+            "id": "...", "name": "不锈钢",
+            "category": "原辅料",
+            "backing_counts": {
+              "background": 2, "transport": 1,
+              "material": 1, "lci": 0, "special": 1,
+            },
+          }
+        ],
+        "note_if_truncated": null,  # set when size cap (200) was hit; agent
+                                    # then calls list_data_items for full
+      },
+    }
+  ],
+}
+```
+
+Three design points:
+
+1. **Headline + drill-down in one shot.** The agent gets case metadata,
+   the stage tree, processes inside each stage, products/disposals
+   attached to each stage's processes, and the data-item summary (with
+   "what's filled vs missing" backing counts) — without needing to issue
+   the 4-to-8 round trips this represents at the wire level.
+2. **stage-rooted view.** All sub-collections (processes,
+   products+disposals, data items) live under their owning stage, so the
+   LLM can answer scoped questions ("what's in the 原材料 stage?") by
+   looking at one node.
+3. **Truncation signal.** `data_items.note_if_truncated` is non-null
+   when the first page of `getDataConfigurationList` didn't capture all
+   rows — the agent then falls back to `list_data_items(case_id,
+   stage_id, page=N)` for deep paging. Most cases never hit this.
+
+### Cost analysis
+
+For a typical case (3 stages):
+- Wire calls: 1 (`getCaseDetail`) + 1 (`getBrandInfo` for name) +
+  1 (`getCaseStage`) + 3 (`getProcessList` × 3) +
+  3 (`getDataConfigurationList` × 3) + 1 (`getCaseDisposals`) = **10 calls**
+- Latency budget: ~3 s wall-clock if serialised; ~600 ms if fanned out
+- Tokens to LLM: one ~2 KB response vs ten ~300 B responses with
+  per-call tool descriptions reloaded — saves ~3 KB and one
+  decision-cycle per call
 
 ## Why this aggregation, not 1:1
 

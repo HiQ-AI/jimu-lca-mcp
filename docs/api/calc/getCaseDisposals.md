@@ -18,4 +18,89 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getCaseDisposals?caseId=<case-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, list of stage rows; each has a `children` array
+  with the products / disposals attached to that stage
+```
+
+### What this endpoint does
+
+It returns the case's **product + disposal tree**, grouped by stage:
+
+```
+[
+  stage A
+    children: [product A1, product A2, disposal A1, ...]
+  stage B
+    children: [product B1, disposal B1, ...]
+]
+```
+
+The "products" here are the main outputs the case is meant to calculate
+LCIA for, and the "disposals" (废弃物) are the discarded outputs of the
+process tree.
+
+For `calculate_case`, this list is a **required prerequisite**: the
+calculation task body needs the product+disposal id list as input. The
+MCP's `calculate_case` wrapper prefetches this so the agent doesn't have
+to call it explicitly.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "51677310254215173",         // stageId (same id as getCaseStage rows)
+      "name": "原材料生产与制造阶段",
+      "caseId": "51677239114649605",
+      "orderId": 2,
+      "children": [
+        {
+          "id": "51676093661212678",          // element id (product/disposal)
+          "name": "机车",                      // display name
+          "categoryIds": "15889395243696128",  // category enum (产品 / 副产品 / 废弃物)
+          "categoryName": "产品",
+          "processId": "51677310255788037",    // which process this product belongs to
+          "processName": "机车生产",
+          "processCategoryId": "15889430040788992",
+          "processCategoryName": "主工序",
+          "unitId": "41639739781206021",
+          "unitName": "kg",
+          "unitGroup": "41639498714632197",
+          "stageId": "51677310254215173",      // back-pointer to parent stage
+          "stageName": "原材料生产与制造阶段",
+          "processOrderId": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Quirks
+
+- The top-level rows are stages, but `id` is the **stage id** (matches
+  `getCaseStage`'s id), not a separate disposal-list id. The aggregator
+  can join on this without an extra mapping.
+- `children` can be empty when a stage exists but has no
+  product/disposal yet — handle empty array.
+- The `categoryName` enum on `children` rows includes:
+  - `产品` — main product of the process
+  - `副产品` — co-product
+  - `废弃物` — disposal
+- The endpoint name says "disposals" but it returns products too. Don't
+  filter to `categoryName=='废弃物'` and miss the main products.
+
+### MCP tool mapping
+
+**Folded into `get_case_overview`** (provides the product/disposal tree
+view) and **also folded into `calculate_case`** (which prefetches this
+to build the calc task body).
+
+Not exposed as a standalone tool.

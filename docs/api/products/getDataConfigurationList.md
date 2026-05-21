@@ -18,4 +18,115 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/getDataConfigurationList
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"caseId": "<case-id>", "stageId": "<stage-id>", "page": 1, "size": 5}
+
+→ success=true, code=200, list of 5 data items
+```
+
+### What this endpoint shows
+
+Each row is a **data item** in the case — an input / output / emission
+line that's been added to a process. The row reports how many data
+sources are attached to it (backgroundData / transportData / materialData
+/ lciData / specialData counts), so the agent can spot which rows are
+fully sourced vs which still need a backing dataset linked.
+
+This is the read counterpart to `editElements`-style writes — `agent
+saw row X has 0 backgroundData attached, so it knows it must attach a
+background match before submit_calc`.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "stageId": "51677310254215173",
+      "elementName": "不锈钢",            // user-facing material / flow name
+      "elementId": "44546928346628101",   // element id (te_element-equivalent)
+      "categoryIds": "15889393230266368", // category enum (mirrors editor-mcp's RAW_MATERIAL etc.)
+      "categoryName": "原辅料",
+      "ids": "51677310256574470",         // the data-item id (used by editElements)
+      "backgroundData": 2,                // count of background-dataset matches
+      "transportData": 1,                 // count of transport entries
+      "materialData": 1,                  // count of material entries
+      "lciData": 0,                       // count of inline LCI rows
+      "specialData": 1                    // count of "special" data
+    }
+  ]
+}
+```
+
+### Pagination quirk
+
+Body requires `page` + `size` but the **response envelope's pagination
+fields come back as `null`** (`total`, `totalPageNum`, `page`, `size`
+all null in the smoke). Counts in `data` reflect the requested page
+size, but the agent can't tell from the response how many more pages
+exist. Two viable strategies:
+
+1. Pass a large `size` (e.g. 200) and assume single-page coverage.
+2. Walk pages until a short result, treating `< size` rows as the last
+   page.
+
+The aggregator picks option 1 — most cases have tens of data items, not
+thousands.
+
+### Doc quirks
+
+- Doc parameter table mentions `size` typed as `Long`, but smoke shows
+  `int` works. Send `int`.
+- `elementName` mode (`mode=精确` / `模糊`) is supported via the
+  `elementName` query string per upstream docs — fuzzy by default.
+
+### `categoryIds` values
+
+Mirrors editor-mcp's category enum (these are platform-wide stable):
+
+| `categoryIds` | Display name |
+|---|---|
+| 15889393230266368 | 原辅料 |
+| 15889394206359552 | 辅助材料 |
+| 15889391711698944 | 能源 |
+| 1638788913957044224 | 产品 |
+| 1638791739298938880 | 大气排放 |
+| 1638791982526627840 | 水体排放 |
+| 1803624797658284032 | 土壤排放 |
+| 1830432202287087616 | 自然资源 |
+
+(Same as editor-mcp; the same enum file in `auth.py` / a shared constants
+module can serve both.)
+
+### Counts interpretation
+
+The five `*Data` counts on each row tell the agent **what kind of
+backing has been attached**:
+
+- `backgroundData > 0` → matched to one or more entries in the
+  background catalog (`hiq_background_db`)
+- `transportData > 0` → has transport sub-flow attached
+- `materialData > 0` → has a material-flow inline
+- `lciData > 0` → has an inline LCI breakdown (rare)
+- `specialData > 0` → has a "special" data-type attached (e.g. emission
+  factor coefficient)
+
+A row with all counts zero is a data item with a name but no values —
+the agent needs to attach something before calc.
+
+### MCP tool mapping
+
+**Folded into `get_case_overview`** for the *summary* view — the
+aggregator includes the first page of data items per stage with their
+backing counts, so the LLM gets "what's filled vs what's missing"
+without an extra round trip.
+
+For deep-dives, a thin standalone `list_data_items` may still be useful;
+see [../../architecture/tools.md](../../architecture/tools.md). Deferred
+for v0 unless a use case surfaces.
