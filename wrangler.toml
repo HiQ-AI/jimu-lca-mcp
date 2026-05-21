@@ -2,7 +2,7 @@
 # Deploy:    npm run worker:deploy
 # Dev:       npm run worker:dev (binds at http://localhost:8787)
 
-name = "jimulca-mcp"
+name = "jimu-lca-mcp"
 main = "dist/worker.js"
 compatibility_date = "2025-05-01"
 compatibility_flags = ["nodejs_compat"]
