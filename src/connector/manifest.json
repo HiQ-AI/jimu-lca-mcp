@@ -1,0 +1,49 @@
+{
+  "name": "积木 LCA 3.0",
+  "id": "jimu-lca",
+  "description": "Drive product-carbon-footprint workflows on 积木LCA 3.0 — create products, edit data items, calculate LCIA, drill into sensitivity. Built primarily for HiQ Cortex Desktop.",
+  "author": {
+    "name": "HiQ",
+    "url": "https://hiq.earth"
+  },
+  "version": "0.1.0-alpha.1",
+  "connector_url": "https://jimulca-mcp.hiq.earth/mcp",
+  "transport": "streamable-http",
+  "auth": {
+    "type": "credential",
+    "credential_name": "memberKey",
+    "credential_format": "app:[0-9a-zA-Z]+",
+    "instructions": "Obtain your member key from the 易碳云开放平台 admin console (https://open.ecdigit.com/oplatform).",
+    "header": "X-Member-Key"
+  },
+  "tools": [
+    "get_units",
+    "list_background_db_versions",
+    "list_calculation_methods",
+    "list_spaces",
+    "list_space_members",
+    "list_models",
+    "list_products",
+    "get_product",
+    "get_case_overview",
+    "list_data_items",
+    "edit_data_items",
+    "export_elements_excel",
+    "import_elements_excel",
+    "create_product",
+    "copy_case",
+    "delete_case",
+    "calculate_case",
+    "list_case_calculation_methods",
+    "get_lcia_detail",
+    "get_sensitivity",
+    "get_product_lcia",
+    "get_top_contributors"
+  ],
+  "links": {
+    "documentation": "https://github.com/HiQ-AI/jimu-lca-mcp",
+    "support": "https://github.com/HiQ-AI/jimu-lca-mcp/issues",
+    "privacy_policy": "https://hiq.earth/privacy"
+  },
+  "categories": ["lca", "carbon-footprint", "manufacturing"]
+}
