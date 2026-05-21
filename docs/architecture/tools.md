@@ -1,12 +1,31 @@
-# Proposed MCP tool surface (v0)
+# MCP tool surface (v0)
 
-Aggregates the 32 LCA-runtime endpoints into a **22-tool** MCP surface for the
-Cortex agent. Status legend:
+The 32 LCA-runtime endpoints map to **22 MCP tools** in v0 (20 primitives wrapping the surface, plus 2 convenience aggregators for high-frequency user intents). Status legend:
 
 - 📖 read-only — safe to call freely
 - ✍️ write — `destructiveHint=True`; skill rules will require user confirmation
 - 🧩 aggregator — wraps multiple upstream calls into one
+- 🎯 convenience aggregator — captures a common high-value user-intent in
+  one call (different from 🧩 which is mostly about avoiding silent failure
+  modes); high LLM ergonomics
 - ⏸ deferred — wrapping postponed until use case appears
+
+The surface was sized by walking 6 representative Cortex agent user stories
+end-to-end against prod (see `tests/user_story_trace.py`). Findings that
+drove tool decisions:
+
+- Story 2 ("LCIA detail for product X") and Story 5 ("top contributors to
+  GWP") each take 5–10 wire calls in the raw API. Both got new 🎯
+  convenience aggregators (`get_product_lcia`, `get_top_contributors`).
+- Story 1 ("highest GWP in space") needs only `list_products` — its
+  `co2Content` is on every row, no drill required. No aggregator.
+- Story 4 ("locate data item to edit") drills the same stage→process→items
+  path `get_case_overview` already aggregates. Reuse, don't duplicate.
+- `getCaseDetail.versionId` ≠ the actually-calculated `versionId` in
+  some cases (real footgun observed in Story 2). The
+  `list_case_calculation_methods` MCP wrapper plus
+  `get_product_lcia` aggregator both handle this internally so the agent
+  never has to loop over versions by hand.
 
 ## Tool list
 
@@ -71,6 +90,18 @@ Cortex agent. Status legend:
 | Tool | Upstream | Notes |
 |---|---|---|
 | ⏸ ✍️ `submit_uncertainty_analysis(...)` | `POST /lca/v3/submitUncertaintyAnalysis` | Monte Carlo / uncertainty calc trigger. Async — need to clarify polling. |
+
+### Convenience aggregators (added after user-story testing)
+
+| Tool | Upstream chain it collapses | Notes |
+|---|---|---|
+| 🎯📖 `get_product_lcia(name_or_brand_id, indicator='GWP', target_product=None)` | `getBrandPage` → `getBrandInfo` → `getCaseDetail` → version-discovery loop over `getCaseCalculationMethods` → `getCaseLciaDetails` | Story 2 collapsed: "show me the LCIA for product X" goes from 5 raw calls (worst case 10 if version-discovery loops) to one tool. Filters indicator (default GWP), picks the first target product if not specified. |
+| 🎯📖 `get_top_contributors(product_or_case_id, indicator='GWP', threshold=0.05)` | All of the above + `getCaseSensitive` | Story 5 collapsed: "what's driving the GWP of product X" goes from 10 raw calls to one tool. Returns the sorted top-N contributing data items with their share. |
+
+Both also accept the primitive tools' params for flexibility — agents that
+want full control (multi-target, indicator switching, threshold tuning) can
+still call the primitives directly. The 🎯 tools are not the only path,
+they're the **default** path for their respective intents.
 
 ## `get_case_overview` aggregator shape
 

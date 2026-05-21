@@ -1,0 +1,65 @@
+{
+  "name": "jimu-lca-mcp",
+  "version": "0.1.0-alpha.1",
+  "description": "MCP server + CLI for 易碳云开放平台 积木LCA 3.0 — product carbon footprint workspace.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "jimu-lca-mcp": "./dist/server.js",
+    "jimu-lca": "./dist/cli.js"
+  },
+  "exports": {
+    "./tools": {
+      "import": "./dist/tools/index.js",
+      "types": "./dist/tools/index.d.ts"
+    },
+    "./manifest": "./src/connector/manifest.json"
+  },
+  "files": [
+    "dist",
+    "src/connector/manifest.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/server.ts",
+    "test": "tsx tests/run-all.ts",
+    "smoke": "tsx tests/smoke.ts",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "yargs": "^18.0.0",
+    "zod": "^4.4.0"
+  },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250320.0",
+    "@types/node": "^22.0.0",
+    "@types/yargs": "^17.0.32",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HiQ-AI/jimu-lca-mcp.git"
+  },
+  "homepage": "https://github.com/HiQ-AI/jimu-lca-mcp#readme",
+  "bugs": "https://github.com/HiQ-AI/jimu-lca-mcp/issues",
+  "keywords": [
+    "mcp",
+    "lca",
+    "carbon-footprint",
+    "积木LCA",
+    "易碳",
+    "cortex"
+  ]
+}
