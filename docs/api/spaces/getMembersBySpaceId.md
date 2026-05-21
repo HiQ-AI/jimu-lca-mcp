@@ -18,4 +18,110 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+# All roles in the space (dicRoleId omitted)
+GET https://open.ecdigit.com/openapi/lca/v3/getMembersBySpaceId?spaceId=<space-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, N members merged across owner+admin+regular
+
+# Filtered by role
+GET …?spaceId=<space-id>&dicRoleId=1801221779521712138  → only owners
+GET …?spaceId=<space-id>&dicRoleId=1801221779521712139  → only admins
+GET …?spaceId=<space-id>&dicRoleId=1801221779521712140  → only regular members
+```
+
+On the smoked space the role split was 1 owner + 1 admin + N regular,
+with the omitted-`dicRoleId` call returning 1 + 1 + N = total. So
+omitting the role is the right move when the agent wants the full
+membership; filter only when scoping to a specific role.
+
+### Doc quirks
+
+1. **Upstream docs mark `dicRoleId` as required** but the backend accepts
+   omission and returns all roles merged. Keep the MCP signature with
+   `dic_role_id: str | None = None` to expose both behaviours.
+2. **`topCompanyId` is in the doc's `curl` example but not in the parameter
+   table.** Tested both with and without; both work. Treat as optional and
+   omit unless we hit a multi-company tenant where the membership lookup
+   needs scoping.
+3. **Read-only by docs, but private-space-only.** The endpoint description
+   notes 「仅支持在自己私有空间下查询成员列表」 — yet on the smoked tenant
+   it worked for an `组织内公开` space too. This may be a wording quirk
+   ("you can only see members of spaces you're a member of, regardless of
+   visibility") rather than a hard private-only filter. Validate per-tenant
+   before relying on the behaviour.
+
+### Role-id constants
+
+| `dicRoleId` | Role |
+|---|---|
+| `1801221779521712138` | 拥有者 (owner) |
+| `1801221779521712139` | 管理员 (admin) |
+| `1801221779521712140` | 普通成员 (regular member) |
+
+Hardcode these constants in `auth.py` or a sibling enum file; the open
+platform doesn't expose a "list role ids" endpoint for this dimension.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "1739",                       // user id
+      "uuid": "5746df6eeccb41a0b2e364e5cebd929c",
+      "username": "<login name>",
+      "name": "<display name>",
+      "mobile": "...",
+      "email": "...",
+      "gender": "男",
+      "pic": "/inspurcloudoss/ecinfo/...",  // avatar URL (relative path)
+      "roleTypeId": ["1801221779521712140"], // list because a user may hold multiple
+      "roleTypeOrder": 3,                  // 1=owner, 2=admin, 3=regular (display order)
+      "addToSpaceTime": "2025-12-03 09:17:17",
+      "isUserAdmin": 0                     // 1 = also a tenant-level admin
+    }
+  ]
+}
+```
+
+### Quirks
+
+- `roleTypeId` is a **list of long-strings**, not a single value — a user
+  can hold multiple roles in the same space. The MCP layer should expose
+  this as a list, not pretend it's a scalar.
+- `mobile` / `email` are sometimes empty strings (user hasn't filled their
+  profile). Don't assume populated; surface as `null` to the agent.
+- `pic` is a relative path on the inspur OSS bucket — not directly
+  fetchable from outside the editor's domain. Most agents don't need
+  avatars; treat as opaque.
+- `addToSpaceTime` is a `YYYY-MM-DD HH:MM:SS` string in the tenant's local
+  timezone (no offset). Parse loosely.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_space_members(
+    space_id: Annotated[str, "Space id, from list_spaces"],
+    role: Annotated[
+        Literal["owner", "admin", "member"] | None,
+        "Optional role filter. Omit for all roles merged.",
+    ] = None,
+) -> str:
+    """List members of a project space, optionally filtered to a single
+    role. Returns id, username, display name, contact info, role IDs the
+    user holds in this space, and when they were added. The role argument
+    accepts a friendly enum (`owner` / `admin` / `member`) and translates
+    to the `dicRoleId` long internally."""
+    ...
+```
+
+The friendly `role` enum keeps the LLM away from typing the 19-digit
+constants. The translation lives in a `ROLE_IDS` dict next to the tool.
+
+Caching: don't cache. Membership is administrative state; staleness can
+mislead the agent into wrong attribution.

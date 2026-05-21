@@ -18,4 +18,81 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getProjectSpaces
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, N spaces (N depends on the member's visibility)
+```
+
+The endpoint returns three flavours of spaces in one list:
+
+1. Spaces marked `dicPermission=组织内公开` (organisation-public) — visible
+   to everyone in the tenant
+2. Private spaces the caller owns
+3. Private spaces the caller has been explicitly added to (per
+   `getMembersBySpaceId`)
+
+There is no separate read for "spaces I own" vs "spaces I'm a member of" —
+the same call returns all three categories merged. Filter client-side if the
+agent only wants one slice.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "42189448265232389",          // spaceId — used by all downstream space calls
+      "name": "<space display name>",
+      "dicPermission": "组织内公开",       // or "私有"
+      "dicPermissionId": "1801221779521712143",  // 142=私有, 143=组织内公开
+      "description": "",
+      "groupList": [
+        {
+          "id": "42189448266543109",      // groupId — sub-folder inside the space
+          "name": "默认分组",              // most spaces have a "默认分组" auto-created
+          "description": "默认分组",
+          "spaceId": "42189448265232389", // back-pointer
+          "isRoot": 1,                    // 1 = top-level group, 0 = nested child
+          "level": 1                      // depth in the group tree
+        }
+        // ...more groups if the user has organised the space into folders
+      ]
+    }
+  ]
+}
+```
+
+### Quirks
+
+- `dicPermissionId` is a string-stringified Long, but the mapping is
+  **stable** (142 / 143). Hardcoding the constants is fine for the
+  user-facing "is this space private?" check. The endpoint also returns
+  `dicPermission` as a human-readable string — prefer it for display.
+- `groupList` shows the space's folder tree. Some spaces have only the
+  auto-created `默认分组` (root); others have nested hierarchies. The MCP
+  tool does not need to walk this tree on every call — surface it raw and
+  let the agent traverse if asked.
+- Query param `name` is supported for fuzzy filter, but the response set is
+  already small (one tenant ≈ tens of spaces). Don't over-engineer paging.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_spaces(
+    name: Annotated[str | None, "Optional fuzzy filter on space name"] = None,
+) -> str:
+    """List all project spaces this memberKey can see. Returns each space's
+    id, name, visibility (private / org-public), and its group (folder)
+    tree. Use the returned `id` as `space_id` for downstream calls
+    (list_products, list_space_members, ...)."""
+    ...
+```
+
+Caching: don't cache. Space list is small and changes are user-driven
+(create space / accept invitation); freshness matters more than the few-ms
+saved.
