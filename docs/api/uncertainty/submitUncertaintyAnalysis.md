@@ -18,4 +18,49 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Write endpoint that kicks off an async Monte Carlo uncertainty
+analysis. **Deferred for v0** until the result-polling story is
+documented and a sandbox member is available (see
+[non-goals.md Group 3](../../architecture/non-goals.md#group-3--endpoints-with-unclear-semantics-until-v1)).
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/submitUncertaintyAnalysis
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {
+  "caseId": "<lca id>",
+  "caseCalMethodId": "<from list_case_calculation_methods>",
+  "brandName": "<product name, from get_product>",
+  "productElementId": "<target product id>"
+}
+```
+
+### Open questions before v1 ship
+
+- **Where does the result land?** Upstream docs describe the submission
+  but not the polling/result endpoint. Likely lives in another endpoint
+  not yet cataloged, or attaches to the calc-record's status field
+  observable via `getCaseCalculationMethods`.
+- **Run time**: Monte Carlo on a real case can take minutes. The wrapper
+  needs to either block-with-progress, return-immediately-with-task-id,
+  or both modes (sync flag).
+- **Configurability**: docs don't mention iteration count, confidence
+  level, or parameter-space inputs. Either fixed-defaults server-side or
+  configurable via additional body fields.
+
+### MCP tool mapping (deferred ⏸)
+
+Will be wrapped as `submit_uncertainty_analysis(...)` once the polling
++ result-shape story is clear. Until then, document the existence and
+move on.
+
+### Skill rule (when wrapped)
+
+Mirrors `calculate_case` — uncertainty analysis on a real case consumes
+compute. Skill enforces user-confirmation gate before submitting; after
+submission, the skill surfaces "this will take ~N minutes; I'll
+re-check periodically" rather than blocking the entire agent turn.

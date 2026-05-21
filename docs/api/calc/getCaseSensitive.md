@@ -18,4 +18,89 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/getCaseSensitive
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {
+  "caseCalMethodId": "<from list_case_calculation_methods>",
+  "impactFactorId": "<from get_lcia_detail, the influenceFactorId>",
+  "productElementId": "<target product id>",
+  "basicLine": 0       // 0-1 threshold; rows with contribution < basicLine are filtered out
+}
+
+→ success=true, code=200, list of {elementId, name, val} sensitivity rows
+```
+
+### What it returns
+
+Per-data-item contribution share toward one (impact factor, product)
+combination. The agent calls this to answer "which data items dominate
+this case's GWP?" or "which suppliers does the result hinge on?".
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "elementId": "51677310257098758",
+      "name": "二次循环碳钢",
+      "val": "0.376749873204641980054573"   // contribution share, 0-1 (string-decimal)
+    },
+    ...
+  ]
+}
+```
+
+Smoked case returned **25 rows** for one (caseCalMethodId, indicator,
+product) — same cardinality as the LCIA detail. Sorted by `val`
+descending (highest contributor first), so the top of the list is the
+agent's first place to look.
+
+### `basicLine` filter
+
+`basicLine` is a 0-1 threshold. Rows with `val < basicLine` are
+filtered out server-side. Pass `0` to see everything; pass `0.05` to
+see only items contributing ≥5%. Useful for trimming long lists down
+to "what actually matters".
+
+### Quirks
+
+- The doc table calls the field `impactFactorId` but `get_lcia_detail`
+  surfaces it as `influenceFactorId`. **Same value, different spelling.**
+  Map at the MCP layer so the agent never sees the spelling drift.
+- `val` is **fractional**, not a count or absolute number — 0.376 =
+  37.6% of the indicator value. Render as % when displaying to the
+  user.
+- The list does NOT include a sentinel "all others" row; if all 25
+  rows sum to 0.95 you have 5% unaccounted. Don't make up the missing
+  slice.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_sensitivity(
+    case_cal_method_id: Annotated[str, "From list_case_calculation_methods"],
+    impact_factor_id: Annotated[
+        str,
+        "Impact-factor id, from get_lcia_detail (the influenceFactorId on "
+        "each result row).",
+    ],
+    product_element_id: Annotated[str, "Target product / disposal id"],
+    threshold: Annotated[
+        float,
+        "Filter out data items contributing less than this share (0-1). "
+        "Default 0 = return everything.",
+    ] = 0,
+) -> str:
+    """Per-data-item contribution share toward one (impact factor, product)
+    combination. Returns sorted-by-magnitude list; pass a threshold to
+    trim to only the items meaningfully driving the result."""
+    ...
+```
+
+Caching: cache per-key 5-10 minutes. Same staleness profile as
+`get_lcia_detail`.

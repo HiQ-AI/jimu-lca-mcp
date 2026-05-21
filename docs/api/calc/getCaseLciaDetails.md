@@ -18,4 +18,98 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/getCaseLciaDetails
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"caseId": "<case>", "id": "<caseCalMethodId>", "targetProduct": "<product-element-id>"}
+
+→ success=true, code=200, list of impact-factor result rows
+```
+
+The smoked case returned **25 rows** for one (caseCalMethodId,
+targetProduct) — one row per impact factor of the LCIA method (e.g. EF
+v3.1 has ~25 indicators: GWP100, AP, EP-freshwater, ODP, …). Each row
+holds the indicator value broken down by life-cycle stage and by
+direct/indirect/transport contribution.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "stageName": "原材料生产与制造阶段",
+      "stageOrderId": 2,
+      "influenceFactorId": "48980764681973791",   // impact-factor id (per-indicator)
+      "influenceFactorName": "Net Calorific Value",
+      "influenceFactorNameEn": "Net Calorific Value",
+      "influenceFactorUnit": "MJ, net calorific value/unit",
+      "productElementId": "51676093661212678",    // target product / disposal id
+      "productName": "机车",
+      "unit": "MJ, net calorific value/unit",     // duplicate of influenceFactorUnit
+      "indirect": "3099212.89957424547193",        // string-decimal — upstream / supply chain contribution
+      "transport": "0",                            //                — transport contribution
+      "direct": "0",                               //                — direct/process emissions
+      "summary": "3099212.89957424547193",         // sum: indirect + transport + direct
+      "co2Content": null                           // when computed via the EF system: redundant with summary on the GWP indicator
+    }
+  ]
+}
+```
+
+The breakdown by `indirect / transport / direct / summary` is consistent
+with the editor.hiqlcd.com UI's LCIA result tables — same triplet.
+
+### `influenceFactorId` is the key for `get_sensitivity`
+
+The agent picks one impact factor (e.g. GWP100) from this response and
+passes its `influenceFactorId` to `getCaseSensitive` to drill into "which
+data items contributed most to this factor". Without LCIA details first,
+sensitivity is unrunnable.
+
+### Quirks
+
+- `unit` and `influenceFactorUnit` are duplicates in smoke. Treat as
+  the same value; prefer `influenceFactorUnit` for clarity.
+- All numeric fields are **string-decimal** with high precision. Parse
+  to `Decimal`.
+- Rows are pre-grouped by stage but not sorted by impact magnitude —
+  if the agent wants "top 5 contributing stages", it has to sort
+  client-side by `summary`.
+- The same impact factor appears in multiple rows (one per stage). To
+  get the case-total for a given indicator, the agent has to sum the
+  `summary` values across stages — the endpoint does NOT pre-aggregate
+  to case-totals.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_lcia_detail(
+    case_id: Annotated[str, "Case id"],
+    case_cal_method_id: Annotated[
+        str,
+        "Calculation-record id, from list_case_calculation_methods "
+        "(the inner calculationMethods[].id, NOT the outer LCIA-method id).",
+    ],
+    target_product: Annotated[
+        str,
+        "Product / disposal id to fetch results for. From get_case_overview "
+        "(stages[].products_and_disposals[].id) or get_case_disposals.",
+    ],
+) -> str:
+    """Return the LCIA result table for one (case, calculation-method,
+    target product) triple. Each row is one impact factor × stage with
+    direct / indirect / transport / summary contributions. The
+    `influence_factor_id` on each row is what get_sensitivity consumes
+    to drill into per-data-item contribution shares."""
+    ...
+```
+
+Caching: cache per-key for 5-10 minutes. Results are immutable once a
+calc finishes, but the agent might re-fetch as the user explores
+different products.

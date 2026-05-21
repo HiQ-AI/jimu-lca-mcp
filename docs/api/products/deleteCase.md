@@ -18,4 +18,45 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Destructive write — removes an LCA case. Documented from upstream docs
+only.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/deleteCase
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"id": "<lca id, from getCaseDetail>"}
+```
+
+Same `id` (not `caseId`) parameter convention as `getCaseDetail`. The
+docs don't say whether this is a soft-delete (is_deleted flag) or hard
+delete; whether calc history is also wiped; or whether deleting a case
+auto-deletes the parent product when it becomes empty. **Smoke before
+trust.**
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"destructiveHint": True, "idempotentHint": True})
+async def delete_case(
+    case_id: Annotated[str, "Case id to delete"],
+) -> str:
+    """Delete an LCA case. Destructive — once removed, the case's data
+    items, background matches, and calc history are gone (soft- vs
+    hard-delete behaviour to be verified).
+
+    Skill rule: never call without explicit user confirmation showing
+    the case name, status, and any calc records that will be lost."""
+    ...
+```
+
+### Skill rule
+
+Destructive + idempotent (re-calling on an already-deleted id should
+no-op or 404, both acceptable). Always confirm with the user; show the
+case name + statusName + calc-record count before submitting. Pattern
+match: hiq-editor never auto-deletes anything either.

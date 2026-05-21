@@ -18,4 +18,107 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getCaseCalculationMethods?caseId=<case-id>&versionId=<version-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, list of LCIA-method buckets that have been run on this (case, version)
+```
+
+### What it returns
+
+A case can be calculated against multiple LCIA methods (EF v3.1 / EN15804
+/ CISA-EPD / USEtox / …) and each method can be run multiple times
+(re-runs after data edits). This endpoint groups history **by method**:
+
+```
+[
+  { id, name="EF v3.1", versionName, calculationMethods: [
+      { id (=caseCalMethodId), targetProduct, calState, orderNum, ... },
+      ...  // one entry per (method, target product, run)
+  ]},
+  ...
+]
+```
+
+The inner `id` on `calculationMethods[]` is the **`caseCalMethodId`** —
+the single most-reused identifier downstream:
+
+- `getCaseLciaDetails` consumes it as `id`
+- `getCaseSensitive` consumes it as `caseCalMethodId`
+- `publishData` consumes it as `caseCalMethodId`
+- `submitUncertaintyAnalysis` consumes it as `caseCalMethodId`
+
+So this endpoint is the read primitive that hands the agent the key it
+needs to fetch any kind of post-calc result.
+
+### Quirks
+
+- **`versionId` must match the version the case was actually calculated
+  against**, not just any version the tenant has. Calling with a
+  versionId for which no calc has run returns an **empty list with
+  success=true** — easy to mis-read as "method list is empty" when the
+  real issue is version-mismatch.
+  - In smoke: the case's `versionId` from `getCaseDetail` was
+    `41712481948418053` (Ecoinvent3.10), but the actual calculated
+    version was `48932530878033925` (Ecoinvent3.12+HiQ1.4.0). The
+    `getCaseDetail.versionId` is the *configured* version; the
+    *calculated* version may differ. **Trust the brand-page
+    `getBrandPage` row's status semantics over `getCaseDetail`** when
+    looking for "has this been calculated".
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "48980764564008972",       // LCIA method id (matches list_calculation_methods.id)
+      "uuid": "f7db2422-...",
+      "name": "EF v3.1",
+      "version": "9a1d4fd6-...",       // background DB version uuid
+      "orderNo": 245,
+      "versionName": "Ecoinvent3.12+HiQ1.4.0",
+      "calculationMethods": [
+        {
+          "id": "51677491393908741",   // *** caseCalMethodId — the key downstream calls need ***
+          "uuid": "dc7de246-...",
+          "caseId": "51677239114649605",
+          "calculationMethodId": "48980764564008972",
+          "status": "158894365086199856",
+          "targetProduct": "51676093661212678",  // which product/disposal was calculated
+          "orderNum": 1,
+          "calState": 2                // 2 = success (other states undocumented; need more samples)
+        }
+      ]
+    }
+  ]
+}
+```
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_case_calculation_methods(
+    case_id: Annotated[str, "Case id"],
+    version_id: Annotated[
+        str,
+        "Background-DB version id the case was calculated against. "
+        "Use list_background_db_versions to discover; note this may "
+        "differ from the case's configured version if the user has "
+        "re-calculated against a newer DB.",
+    ],
+) -> str:
+    """List LCIA methods that have been run on a case under a specific
+    background-DB version. Each entry includes the per-target-product
+    calculation records; the inner `id` field (caseCalMethodId) is what
+    `get_lcia_detail`, `get_sensitivity`, `publish_data`, and
+    `submit_uncertainty_analysis` consume."""
+    ...
+```
+
+Caching: don't cache. Calc history changes any time the agent or the
+user triggers a re-calc.

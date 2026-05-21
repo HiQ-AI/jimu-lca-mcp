@@ -18,4 +18,56 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Write endpoint — creates a duplicate LCA case under the same product
+(or possibly a different one — docs are sparse). Documented from
+upstream docs only.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/copyCase
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"caseId": "<lca id, from getCaseDetail>"}
+```
+
+Single-input — just the source caseId. The upstream docs don't say:
+
+- Where the copy lands (same brand? new brand?)
+- What name the copy gets (auto-numbered? user-prompted?)
+- Whether data items / matches are also copied or just the shell
+- Whether calc history is reset on the copy
+
+All of these are important to the agent's mental model. **Smoke before
+trust.**
+
+### Use case
+
+The typical reason an agent copies a case is **variant modelling** —
+e.g. "show me the same product with a different background DB version"
+or "what if we swap supplier X for supplier Y for steel input".
+Copy-then-edit is much cheaper than re-creating the case from scratch.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
+async def copy_case(
+    case_id: Annotated[str, "Source case id to duplicate"],
+) -> str:
+    """Duplicate an existing LCA case. Returns the new case id. Useful
+    for variant analysis (copy → edit → recalculate without disturbing
+    the original).
+
+    Behaviour to verify on first use: whether data-item values, background
+    matches, and calc history carry over to the copy or get reset."""
+    ...
+```
+
+### Skill rule
+
+Copying is reversible (the new case can be deleted) but creates a real
+entity. Skill should confirm the copy intent and surface the new case
+id immediately after so the agent can switch to working on the copy.

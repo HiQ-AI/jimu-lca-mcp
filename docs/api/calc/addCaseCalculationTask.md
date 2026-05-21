@@ -18,4 +18,98 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Write endpoint — triggers a real LCIA calculation that may take seconds
+to minutes and writes a new calc-record on the case. Documented from
+upstream docs only; runtime behaviour (sync vs async return, polling
+mechanics) needs validation against a sandbox member.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/addCaseCalculationTask
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {
+  "caseId": "<lca id, from getCaseDetail>",
+  "impactMethodId": "<LCIA method id, from list_calculation_methods>",
+  "targetProduct": "<product/disposal id, from getCaseDisposals>",
+  "unitComment": "<declared unit comment, from getCaseDetail>",
+  "consultProductName": "<reference product, from getCaseDetail>",
+  ...  // (truncated — additional fields per upstream docs)
+}
+```
+
+### Why this is the aggregator's center of mass
+
+`calculate_case` is the MCP tool that **fuses this endpoint with its
+prerequisites**:
+
+1. `getCaseDisposals(caseId)` to discover `targetProduct` candidates
+2. `getCaseDetail(id=caseId)` to fetch `unitComment` /
+   `consultProductName` (the request body fields the docs require but
+   the agent shouldn't have to look up separately)
+3. THIS endpoint to submit
+
+Without the aggregator, the agent has to do steps 1–2 by hand and risks
+mismatched fields. With it, the agent passes only the semantic inputs
+(`case_id`, `method_id`, optionally `target_product` if the case has
+multiple) and the wrapper assembles the rest.
+
+### Open questions (smoke before trust)
+
+- **Sync vs async**: does the call return immediately with a
+  `caseCalMethodId` placeholder and the calc runs in background, or
+  does it block until the LCIA finishes? Docs don't say. Affects
+  whether the wrapper needs a polling loop.
+- **Multi-product cases**: a case with N products + M disposals
+  produces how many calc-records? One per (method, target) per call?
+  Means the agent needs to call this N+M times for a full case?
+- **Idempotency**: re-calling with same args while a previous calc is
+  in-flight or already done — does it overwrite, queue another, or
+  no-op?
+
+### MCP tool mapping (🧩 aggregator)
+
+```python
+@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
+async def calculate_case(
+    case_id: Annotated[str, "Case id"],
+    method_id: Annotated[
+        str,
+        "LCIA method id, from list_calculation_methods (under the case's "
+        "background-DB version).",
+    ],
+    target_product: Annotated[
+        str | None,
+        "Specific product or disposal id to calculate for. If omitted and "
+        "the case has exactly one product, the wrapper picks it; if the "
+        "case has multiple, the wrapper returns an error listing the "
+        "candidates.",
+    ] = None,
+) -> str:
+    """Trigger an LCIA calculation on a case for one method × target.
+    The wrapper prefetches the case's product/disposal list and metadata
+    fields the API requires but the agent shouldn't have to look up;
+    pass only the semantic inputs.
+
+    Returns the caseCalMethodId of the newly queued / completed
+    calculation, which downstream get_lcia_detail / get_sensitivity /
+    publish_data consume."""
+    ...
+```
+
+### Skill rule
+
+`jimu-lca-product-carbon` skill (when written) treats `calculate_case`
+as a **destructive, user-confirmed** action:
+
+1. Show the user what's about to be calculated (case name, method
+   name, target product, version)
+2. Wait for explicit OK
+3. Submit
+4. Surface the resulting LCIA summary (top 3 impact factors) so the
+   user sees the result without a follow-up tool call
+
+Mirrors hiq-editor's "never auto-submit" gate.

@@ -18,4 +18,43 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Write endpoint; "上传报告数据" (publish report data) semantics are
+under-specified in upstream docs. **Deferred for v0** — wrap only after
+the use case appears in real Cortex flow (see
+[non-goals.md Group 3](../../architecture/non-goals.md#group-3--endpoints-with-unclear-semantics-until-v1)).
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/publishData
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"caseCalMethodId": "<from list_case_calculation_methods>"}
+```
+
+That's the entire documented input. Response shape and side-effects are
+not described. Two plausible behaviours:
+
+1. **Publish to a tenant-internal report database** — moves the LCA
+   result into a shared catalog so other cases can reference it
+2. **Push to a publish endpoint** — e.g. send to a national EPD platform
+   or a customer-facing share URL
+
+Without smoke we can't tell which. The status name `已发布` (from
+`getBrandInfo.lcaBrandCases[].statusName`) suggests option 1 — the case
+itself moves from `已计算` to `已发布` as the side-effect.
+
+### MCP tool mapping (deferred ⏸)
+
+Will be wrapped as `publish_data(case_cal_method_id)` once the use case
+appears. Until then, document but don't ship. The companion skill will
+NOT mention this endpoint to the agent.
+
+### Skill rule (when wrapped)
+
+Publication is irreversible — wrapping must require explicit user
+confirmation similar to `calculate_case` / hiq-editor's submit-review
+gate. Agent prepares the publication body, shows the user, waits for
+"OK 发布", then submits.

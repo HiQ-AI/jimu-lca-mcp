@@ -18,4 +18,81 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+Write endpoint that creates a new product (brand) in the tenant.
+Documented from upstream docs only; will be validated against a
+sandbox member before going live.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/addBrand
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {
+  "name": "<product display name>",
+  "description": "<optional>",
+  "industryId": "<from list_models — pick the industry the product is in>",
+  "categoryId": "<from list_models — pick the matching product category>",
+  "modelId": "<from list_models — template the new product starts from>",
+  "spaceId": "<from list_spaces — where to file the product>",
+  "groupId": "<from list_spaces — sub-folder inside the space>"
+}
+```
+
+### Why the input is "5 ids + a name"
+
+A new product in 积木LCA 3.0 is not a blank slate — it's instantiated
+from a **model template** (`modelId`) and inherits that template's
+stage / process / data-item structure. The (industryId, categoryId)
+pair must be consistent with the model. The agent's job is to surface
+the right `modelId` choice; the rest are scoping.
+
+### Aggregator-style wrapper
+
+The MCP wrapper takes friendly inputs and resolves the 5 ids server-side
+when possible:
+
+```python
+@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
+async def create_product(
+    name: Annotated[str, "Product display name (must be unique-ish in the tenant)"],
+    model_id: Annotated[str, "Model template id, from list_models"],
+    space_id: Annotated[str, "Space id, from list_spaces"],
+    group_id: Annotated[
+        str | None,
+        "Optional group/folder id. Defaults to the space's root group if omitted.",
+    ] = None,
+    description: Annotated[str | None, ""] = None,
+) -> str:
+    """Create a new product (brand) by instantiating a model template.
+    The wrapper looks up industryId / categoryId from the chosen model
+    (they must match) and defaults groupId to the space's root group
+    when omitted, so the agent only has to provide the four semantic
+    inputs (name, model, space, optional group)."""
+    ...
+```
+
+### Open questions
+
+- **Idempotency** — does a duplicate name in the same space error or
+  succeed silently? Validate before assuming.
+- **Default group** — does omitting `groupId` actually work, or is the
+  doc's "required" annotation strict? May need the wrapper to fetch the
+  space's root group explicitly.
+- **Returns the new brandId?** Doc snippet truncated; need to smoke to
+  confirm response shape, which determines whether the wrapper can
+  return a usable id without a follow-up call.
+
+### Skill rule
+
+Creating a product is a structural side effect. Skill requires the
+agent to show the user:
+
+- Resolved model name (not just id)
+- Target space + group display path
+- Product name
+
+…then wait for confirmation. Same gate hiq-editor uses for
+`create_process`.
