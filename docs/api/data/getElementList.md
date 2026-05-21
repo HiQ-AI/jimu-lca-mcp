@@ -85,17 +85,21 @@ In the aggregator `get_case_overview` we use the lighter
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_data_items(
-    process_id: Annotated[str, "Process id, from getProcessList / get_case_overview"],
-) -> str:
-    """List all data items (exchanges) attached to a process: inputs,
-    outputs, emissions. Each row has the current value, unit, source
-    (measured / literature / etc.), and the data-item `id` needed by
-    edit_data_items. Use after `get_case_overview` when the agent wants
-    to see or edit specific values inside a process."""
-    ...
+```ts
+server.registerTool(
+  "list_data_items",
+  {
+    description: "List all data items (exchanges) attached to a process: inputs, outputs, emissions. Each row has the current value, unit, source (measured / literature / etc.), and the data-item `id` needed by edit_data_items. Use after `get_case_overview` when the agent wants to see or edit specific values inside a process.",
+    inputSchema: {
+      process_id: z.string().describe("Process id, from getProcessList / get_case_overview"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ process_id }) => {
+    // implementation in src/tools/list_data_items.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: don't cache. Values are the active editing surface — staleness

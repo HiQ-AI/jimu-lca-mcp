@@ -95,21 +95,25 @@ treat as stable enough to surface but log when they're absent.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_products(
-    space_id: Annotated[str | None, "Optional space id to scope to (from list_spaces)"] = None,
-    group_id: Annotated[str | None, "Optional group id (folder inside a space)"] = None,
-    name: Annotated[str | None, "Optional fuzzy name filter"] = None,
-    page: Annotated[int, "Page number (1-indexed)"] = 1,
-    size: Annotated[int, "Page size (default 10, server caps unknown)"] = 10,
-) -> str:
-    """Paginate the tenant's product catalog, optionally scoped to a space
-    or a group. Returns each product's metadata plus the headline `co2Content`
-    GWP value with its unit (`co2Unit`), so headline-only questions can be
-    answered without drilling into LCA cases. Returned `id` is the brandId
-    consumed by `get_product` / `get_case_overview`."""
-    ...
+```ts
+server.registerTool(
+  "list_products",
+  {
+    description: "Paginate the tenant's product catalog, optionally scoped to a space or a group. Returns each product's metadata plus the headline `co2Content` GWP value with its unit (`co2Unit`), so headline-only questions can be answered without drilling into LCA cases. Returned `id` is the brandId consumed by `get_product` / `get_case_overview`.",
+    inputSchema: {
+      space_id: z.string().describe("Optional space id to scope to (from list_spaces)").optional(),
+      group_id: z.string().describe("Optional group id (folder inside a space)").optional(),
+      name: z.string().describe("Optional fuzzy name filter").optional(),
+      page: z.number().int().describe("Page number (1-indexed)").default(1).optional(),
+      size: z.number().int().describe("Page size (default 10, server caps unknown)").default(10).optional(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ space_id, group_id, name, page, size }) => {
+    // implementation in src/tools/list_products.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: don't cache. Product list is the most volatile read endpoint —

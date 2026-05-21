@@ -91,7 +91,7 @@ HiQ's internal SSO domain) — was considered and rejected for v0.
 | Identity model | memberKey is a per-user secret in the host's config; one user ↔ one 积木LCA member identity | Would need a server-side per-user → memberKey mapping table (new infra) |
 | SSO bridge | None needed — host holds the memberKey locally, sends it as `appId` header per call | Gateway `forward-auth` would need a way to translate an upstream agent's auth into 积木LCA's `appId` header — and there's no shared SSO to bridge |
 | Failure blast radius | Bad memberKey → only that user's MCP fails | Bad central mapping → every downstream user impacted |
-| Release cadence | `uv build && uv publish` (PyPI); user picks up `uvx --from jimu-lca-mcp@latest` on next session | `docker build && kubectl apply` — heavier each ship |
+| Release cadence | `npm publish` (registry-wide); user picks up `npx -y jimu-lca-mcp@latest` on next session | `docker build && kubectl apply` — heavier each ship |
 | Audit / observability | Open-platform server-side logs, plus host stdout if user opts into debug | Could pool through one egress IP for centralised logs (theoretical, no current need) |
 | Rate limiting | Open API charges the memberKey owner; per-user quotas natural | Pooled through one egress IP — all users share one rate budget |
 | Cold start | Local process startup; ~1–2 s | Gateway-routed pod warm ~50 ms, but pays the network hop |
@@ -123,9 +123,34 @@ HiQ's internal SSO domain) — was considered and rejected for v0.
   memberKey at the network edge (would mirror editor-mcp-server's existing
   pattern)
 
-Until one of those, we ship local. The decision is reversible; `auth.py`
+Until one of those, we ship local. The decision is reversible; `auth.ts`
 reads memberKey from env, so swapping env source (local process →
 server-side proxy) is a contained change.
+
+## Runtime stack
+
+**TypeScript / Node.js**, packaged on npm and run via `npx -y
+jimu-lca-mcp@latest`. Built on the official
+[`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)
+TypeScript SDK. Rationale:
+
+- **Cortex Desktop is an Electron app (Node runtime)** — the primary
+  integration target's process spawn ergonomics, type sharing, and
+  packaging story all line up with Node.
+- **`npx` is more universal than `uvx`** for end users — Cortex Desktop
+  users are LCA practitioners, not Python developers, and most don't
+  have `uv` installed by default.
+- **MCP ecosystem skews TypeScript** — most reference servers in
+  `modelcontextprotocol/servers` are TS; community familiarity is
+  highest there.
+- **`editor-mcp-server` is Python**, but it's a deployed HTTP container
+  with PostgreSQL direct reads — different problem shape, different
+  language fit. Local stdio child processes don't inherit that decision.
+
+The `scripts/render_endpoint_docs.py` is a documentation tool (parses
+`docs/api-raw/*.json` → markdown scaffolds), not a runtime dependency.
+It can stay Python or be rewritten as a small Node script later; it's
+maintainer-only and never ships to users.
 
 ## Host integration
 
@@ -143,8 +168,8 @@ underlying spawn pattern is identical):
 {
   "mcpServers": {
     "jimu-lca": {
-      "command": "uvx",
-      "args": ["--from", "jimu-lca-mcp@latest", "jimu-lca-mcp-server"],
+      "command": "npx",
+      "args": ["-y", "jimu-lca-mcp@latest"],
       "env": {
         "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx",
         "JIMU_LCA_BASE_URL": "https://open.ecdigit.com/openapi"
@@ -254,5 +279,5 @@ implies.
 |---|---|
 | memberKey leaked from env / logs | Don't log the key; redact in error messages; advise users to store in OS keychain via desktop config, not in shell rc files |
 | Agent triggers destructive endpoint by mistake | `destructiveHint=True` on write tools (create / delete / submit-calc / publish); skill `Never auto-submit` rule mirroring hiq-editor's |
-| MCP server pinned to a stale version on user's machine | `uvx --from jimu-lca-mcp@latest` re-resolves the latest version each invoke (works the same in any stdio-MCP host) |
+| MCP server pinned to a stale version on user's machine | `npx -y jimu-lca-mcp@latest` re-resolves the latest version each invoke (works the same in any stdio-MCP host) |
 | Open-platform-side rate limiting | Out of scope until we hit it; doc says `频控策略 --次/秒` (unspecified) on every endpoint, no visible budget |

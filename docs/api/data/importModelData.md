@@ -61,24 +61,21 @@ These need validation before we trust the import path. Until then,
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"destructiveHint": True, "idempotentHint": False})
-async def import_elements_excel(
-    case_id: Annotated[str, "Case id, from get_case_overview / get_product"],
-    file_path: Annotated[
-        str,
-        "Local path to the Excel file (typically obtained from "
-        "export_elements_excel after user edits).",
-    ],
-) -> str:
-    """Bulk-update a case's data items from an Excel file. The file must
-    match the schema returned by export_elements_excel — round-trip
-    flow: export → user edits in Excel → import.
-
-    DESTRUCTIVE: this can wipe out or overwrite many data items in one
-    call. The companion skill enforces an explicit user-confirmation
-    gate; do not call this without going through that gate."""
-    ...
+```ts
+server.registerTool(
+  "import_elements_excel",
+  {
+    description: "Bulk-update a case's data items from an Excel file. The file must match the schema returned by export_elements_excel — round-trip flow: export → user edits in Excel → import. DESTRUCTIVE: this can wipe out or overwrite many data items in one call. The companion skill enforces an explicit user-confirmation gate; do not call this without going through that gate.",
+    inputSchema: {
+      case_id: z.string().describe("Case id, from get_case_overview / get_product"),
+    },
+    annotations: { destructiveHint: true, idempotentHint: false },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/import_elements_excel.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Skill rule (mirrors hiq-editor's "never auto-submit")

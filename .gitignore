@@ -1,7 +1,13 @@
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
+# Node / TS build artefacts
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+*.tgz
+.pnpm-store/
+.npm/
+
+# Env / secrets
 .env
 .env.*
 !.env.example
@@ -9,6 +15,15 @@ __pycache__/
 # Local secret files — memberKey lives in env vars / OS keychain, not on disk
 *.key
 secrets/
+
+# Test scaffolding stays local — never publish (fixtures may carry customer data)
+tests/
+
+# Python (docs tooling — scripts/render_endpoint_docs.py)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
 
 # macOS
 .DS_Store

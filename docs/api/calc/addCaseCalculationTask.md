@@ -72,32 +72,23 @@ multiple) and the wrapper assembles the rest.
 
 ### MCP tool mapping (🧩 aggregator)
 
-```python
-@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
-async def calculate_case(
-    case_id: Annotated[str, "Case id"],
-    method_id: Annotated[
-        str,
-        "LCIA method id, from list_calculation_methods (under the case's "
-        "background-DB version).",
-    ],
-    target_product: Annotated[
-        str | None,
-        "Specific product or disposal id to calculate for. If omitted and "
-        "the case has exactly one product, the wrapper picks it; if the "
-        "case has multiple, the wrapper returns an error listing the "
-        "candidates.",
-    ] = None,
-) -> str:
-    """Trigger an LCIA calculation on a case for one method × target.
-    The wrapper prefetches the case's product/disposal list and metadata
-    fields the API requires but the agent shouldn't have to look up;
-    pass only the semantic inputs.
-
-    Returns the caseCalMethodId of the newly queued / completed
-    calculation, which downstream get_lcia_detail / get_sensitivity /
-    publish_data consume."""
-    ...
+```ts
+server.registerTool(
+  "calculate_case",
+  {
+    description: "Trigger an LCIA calculation on a case for one method × target. The wrapper prefetches the case's product/disposal list and metadata fields the API requires but the agent shouldn't have to look up; pass only the semantic inputs. Returns the caseCalMethodId of the newly queued / completed calculation, which downstream get_lcia_detail / get_sensitivity / publish_data consume.",
+    inputSchema: {
+      case_id: z.string().describe("Case id"),
+      method_id: z.string().describe("LCIA method id, from list_calculation_methods (under the case's background-DB version)."),
+      target_product: z.string().describe("Specific product or disposal id to calculate for. If omitted and the case has exactly one product, the wrapper picks it; if the case has multiple, the wrapper returns an error listing the candidates.").optional(),
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+  },
+  async ({ case_id, method_id, target_product }) => {
+    // implementation in src/tools/calculate_case.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Skill rule

@@ -40,18 +40,21 @@ trust.**
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"destructiveHint": True, "idempotentHint": True})
-async def delete_case(
-    case_id: Annotated[str, "Case id to delete"],
-) -> str:
-    """Delete an LCA case. Destructive — once removed, the case's data
-    items, background matches, and calc history are gone (soft- vs
-    hard-delete behaviour to be verified).
-
-    Skill rule: never call without explicit user confirmation showing
-    the case name, status, and any calc records that will be lost."""
-    ...
+```ts
+server.registerTool(
+  "delete_case",
+  {
+    description: "Delete an LCA case. Destructive — once removed, the case's data items, background matches, and calc history are gone (soft- vs hard-delete behaviour to be verified). Skill rule: never call without explicit user confirmation showing the case name, status, and any calc records that will be lost.",
+    inputSchema: {
+      case_id: z.string().describe("Case id to delete"),
+    },
+    annotations: { destructiveHint: true, idempotentHint: true },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/delete_case.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Skill rule

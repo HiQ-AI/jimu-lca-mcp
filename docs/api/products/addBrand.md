@@ -54,24 +54,25 @@ the right `modelId` choice; the rest are scoping.
 The MCP wrapper takes friendly inputs and resolves the 5 ids server-side
 when possible:
 
-```python
-@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
-async def create_product(
-    name: Annotated[str, "Product display name (must be unique-ish in the tenant)"],
-    model_id: Annotated[str, "Model template id, from list_models"],
-    space_id: Annotated[str, "Space id, from list_spaces"],
-    group_id: Annotated[
-        str | None,
-        "Optional group/folder id. Defaults to the space's root group if omitted.",
-    ] = None,
-    description: Annotated[str | None, ""] = None,
-) -> str:
-    """Create a new product (brand) by instantiating a model template.
-    The wrapper looks up industryId / categoryId from the chosen model
-    (they must match) and defaults groupId to the space's root group
-    when omitted, so the agent only has to provide the four semantic
-    inputs (name, model, space, optional group)."""
-    ...
+```ts
+server.registerTool(
+  "create_product",
+  {
+    description: "Create a new product (brand) by instantiating a model template. The wrapper looks up industryId / categoryId from the chosen model (they must match) and defaults groupId to the space's root group when omitted, so the agent only has to provide the four semantic inputs (name, model, space, optional group).",
+    inputSchema: {
+      name: z.string().describe("Product display name (must be unique-ish in the tenant)"),
+      model_id: z.string().describe("Model template id, from list_models"),
+      space_id: z.string().describe("Space id, from list_spaces"),
+      group_id: z.string().describe("Optional group/folder id. Defaults to the space's root group if omitted.").optional(),
+      description: z.string().describe("Optional product description").optional(),
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+  },
+  async ({ name, model_id, space_id, group_id, description }) => {
+    // implementation in src/tools/create_product.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Open questions

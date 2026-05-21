@@ -103,21 +103,22 @@ platform doesn't expose a "list role ids" endpoint for this dimension.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_space_members(
-    space_id: Annotated[str, "Space id, from list_spaces"],
-    role: Annotated[
-        Literal["owner", "admin", "member"] | None,
-        "Optional role filter. Omit for all roles merged.",
-    ] = None,
-) -> str:
-    """List members of a project space, optionally filtered to a single
-    role. Returns id, username, display name, contact info, role IDs the
-    user holds in this space, and when they were added. The role argument
-    accepts a friendly enum (`owner` / `admin` / `member`) and translates
-    to the `dicRoleId` long internally."""
-    ...
+```ts
+server.registerTool(
+  "list_space_members",
+  {
+    description: "List members of a project space, optionally filtered to a single role. Returns id, username, display name, contact info, role IDs the user holds in this space, and when they were added. The role argument accepts a friendly enum (`owner` / `admin` / `member`) and translates to the `dicRoleId` long internally.",
+    inputSchema: {
+      space_id: z.string().describe("Space id, from list_spaces"),
+      role: z.enum(["owner", "admin", "member"]).describe("Optional role filter. Omit for all roles merged.").optional(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ space_id, role }) => {
+    // implementation in src/tools/list_space_members.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 The friendly `role` enum keeps the LLM away from typing the 19-digit

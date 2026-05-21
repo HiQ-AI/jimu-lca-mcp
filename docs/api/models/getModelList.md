@@ -109,22 +109,22 @@ once but didn't author. Surface the flag in summaries.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_models(
-    name: Annotated[str | None, "Optional fuzzy filter on model name."] = None,
-    flag: Annotated[
-        Literal["own", "EC"] | None,
-        "Filter to own-models (tenant-authored) or EC-models (platform-shipped).",
-    ] = None,
-) -> str:
-    """List LCA process templates the tenant can use. When no filter is
-    provided the full catalog may run into hundreds of models; the tool
-    returns a summary view (category counts + first 20 rows) by default.
-    Pass `name` for keyword search, `flag` to scope to own vs platform
-    models. Returned `id` is what create_product / case-creation flows
-    consume as a starting template."""
-    ...
+```ts
+server.registerTool(
+  "list_models",
+  {
+    description: "List LCA process templates the tenant can use. When no filter is provided the full catalog may run into hundreds of models; the tool returns a summary view (category counts + first 20 rows) by default. Pass `name` for keyword search, `flag` to scope to own vs platform models. Returned `id` is what create_product / case-creation flows consume as a starting template.",
+    inputSchema: {
+      name: z.string().describe("Optional fuzzy filter on model name.").optional(),
+      flag: z.enum(["own", "EC"]).describe("Filter to own-models (tenant-authored) or EC-models (platform-shipped).").optional(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ name, flag }) => {
+    // implementation in src/tools/list_models.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: per-`(name, flag)` keyed; TTL ~5 minutes. Catalog changes are

@@ -87,27 +87,21 @@ sensitivity is unrunnable.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_lcia_detail(
-    case_id: Annotated[str, "Case id"],
-    case_cal_method_id: Annotated[
-        str,
-        "Calculation-record id, from list_case_calculation_methods "
-        "(the inner calculationMethods[].id, NOT the outer LCIA-method id).",
-    ],
-    target_product: Annotated[
-        str,
-        "Product / disposal id to fetch results for. From get_case_overview "
-        "(stages[].products_and_disposals[].id) or get_case_disposals.",
-    ],
-) -> str:
-    """Return the LCIA result table for one (case, calculation-method,
-    target product) triple. Each row is one impact factor × stage with
-    direct / indirect / transport / summary contributions. The
-    `influence_factor_id` on each row is what get_sensitivity consumes
-    to drill into per-data-item contribution shares."""
-    ...
+```ts
+server.registerTool(
+  "get_lcia_detail",
+  {
+    description: "Return the LCIA result table for one (case, calculation-method, target product) triple. Each row is one impact factor × stage with direct / indirect / transport / summary contributions. The `influence_factor_id` on each row is what get_sensitivity consumes to drill into per-data-item contribution shares.",
+    inputSchema: {
+      case_id: z.string().describe("Case id"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/get_lcia_detail.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: cache per-key for 5-10 minutes. Results are immutable once a

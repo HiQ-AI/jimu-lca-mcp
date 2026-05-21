@@ -80,26 +80,24 @@ to "what actually matters".
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_sensitivity(
-    case_cal_method_id: Annotated[str, "From list_case_calculation_methods"],
-    impact_factor_id: Annotated[
-        str,
-        "Impact-factor id, from get_lcia_detail (the influenceFactorId on "
-        "each result row).",
-    ],
-    product_element_id: Annotated[str, "Target product / disposal id"],
-    threshold: Annotated[
-        float,
-        "Filter out data items contributing less than this share (0-1). "
-        "Default 0 = return everything.",
-    ] = 0,
-) -> str:
-    """Per-data-item contribution share toward one (impact factor, product)
-    combination. Returns sorted-by-magnitude list; pass a threshold to
-    trim to only the items meaningfully driving the result."""
-    ...
+```ts
+server.registerTool(
+  "get_sensitivity",
+  {
+    description: "Per-data-item contribution share toward one (impact factor, product) combination. Returns sorted-by-magnitude list; pass a threshold to trim to only the items meaningfully driving the result.",
+    inputSchema: {
+      case_cal_method_id: z.string().describe("From list_case_calculation_methods"),
+      impact_factor_id: z.string().describe("Impact-factor id, from get_lcia_detail (the influenceFactorId on each result row)."),
+      product_element_id: z.string().describe("Target product / disposal id"),
+      threshold: z.number().describe("Filter out data items contributing less than this share (0-1). Default 0 = return everything.").default(0).optional(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ case_cal_method_id, impact_factor_id, product_element_id, threshold }) => {
+    // implementation in src/tools/get_sensitivity.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: cache per-key 5-10 minutes. Same staleness profile as

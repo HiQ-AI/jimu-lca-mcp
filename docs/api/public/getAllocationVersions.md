@@ -55,15 +55,21 @@ Matches upstream doc exactly, including `createTime`. No quirks observed.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_background_db_versions() -> str:
-    """List background-database versions this memberKey can use (Ecoinvent
-    3.10 / 3.11 / 3.12 / HiQ-combined variants). Each `id` is a `versionId`
-    that calculation-method lookup, calc submission, and most downstream LCA
-    operations require. Pick a version once per LCA case; mixing versions
-    inside one case is not supported."""
-    ...
+```ts
+server.registerTool(
+  "list_background_db_versions",
+  {
+    description: "List background-database versions this memberKey can use (Ecoinvent 3.10 / 3.11 / 3.12 / HiQ-combined variants). Each `id` is a `versionId` that calculation-method lookup, calc submission, and most downstream LCA operations require. Pick a version once per LCA case; mixing versions inside one case is not supported.",
+    inputSchema: {
+
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async (_args) => {
+    // implementation in src/tools/list_background_db_versions.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Same caching hint as `getAllUnits` — reference data, cache 1 hour at module

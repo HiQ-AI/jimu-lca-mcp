@@ -52,18 +52,21 @@ Copy-then-edit is much cheaper than re-creating the case from scratch.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": False})
-async def copy_case(
-    case_id: Annotated[str, "Source case id to duplicate"],
-) -> str:
-    """Duplicate an existing LCA case. Returns the new case id. Useful
-    for variant analysis (copy → edit → recalculate without disturbing
-    the original).
-
-    Behaviour to verify on first use: whether data-item values, background
-    matches, and calc history carry over to the copy or get reset."""
-    ...
+```ts
+server.registerTool(
+  "copy_case",
+  {
+    description: "Duplicate an existing LCA case. Returns the new case id. Useful for variant analysis (copy → edit → recalculate without disturbing the original). Behaviour to verify on first use: whether data-item values, background matches, and calc history carry over to the copy or get reset.",
+    inputSchema: {
+      case_id: z.string().describe("Source case id to duplicate"),
+    },
+    annotations: { destructiveHint: false, idempotentHint: false },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/copy_case.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Skill rule

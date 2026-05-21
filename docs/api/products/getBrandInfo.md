@@ -115,16 +115,21 @@ The numeric `status` ids are stable but undocumented; rely on
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_product(
-    brand_id: Annotated[str, "Product (brand) id, from list_products"],
-) -> str:
-    """Fetch full product metadata plus the list of LCA cases that exist
-    under it. Each case row carries id, status, boundary, unit, and the
-    background-DB version it uses — the `id` is what `get_case_overview`
-    consumes when the user picks one to dive into."""
-    ...
+```ts
+server.registerTool(
+  "get_product",
+  {
+    description: "Fetch full product metadata plus the list of LCA cases that exist under it. Each case row carries id, status, boundary, unit, and the background-DB version it uses — the `id` is what `get_case_overview` consumes when the user picks one to dive into.",
+    inputSchema: {
+      brand_id: z.string().describe("Product (brand) id, from list_products"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ brand_id }) => {
+    // implementation in src/tools/get_product.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: don't cache. Case status changes (user runs a calc → 待计算 →

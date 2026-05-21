@@ -83,15 +83,21 @@ on the smoked sample) — looks like an internal grouping, probably unused.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_calculation_methods(
-    version_id: Annotated[str, "Background DB version id, from list_background_db_versions"],
-) -> str:
-    """List LCIA calculation methods available under the given background-DB
-    version. Used to pick the `method_id` for calculate_case / get_lcia_detail.
-    Call list_background_db_versions first to get a valid version_id."""
-    ...
+```ts
+server.registerTool(
+  "list_calculation_methods",
+  {
+    description: "List LCIA calculation methods available under the given background-DB version. Used to pick the `method_id` for calculate_case / get_lcia_detail. Call list_background_db_versions first to get a valid version_id.",
+    inputSchema: {
+      version_id: z.string().describe("Background DB version id, from list_background_db_versions"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ version_id }) => {
+    // implementation in src/tools/list_calculation_methods.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: per-`version_id` keyed cache, TTL 1 hour. Method lists rarely change.

@@ -81,16 +81,21 @@ agent only wants one slice.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_spaces(
-    name: Annotated[str | None, "Optional fuzzy filter on space name"] = None,
-) -> str:
-    """List all project spaces this memberKey can see. Returns each space's
-    id, name, visibility (private / org-public), and its group (folder)
-    tree. Use the returned `id` as `space_id` for downstream calls
-    (list_products, list_space_members, ...)."""
-    ...
+```ts
+server.registerTool(
+  "list_spaces",
+  {
+    description: "List all project spaces this memberKey can see. Returns each space's id, name, visibility (private / org-public), and its group (folder) tree. Use the returned `id` as `space_id` for downstream calls (list_products, list_space_members, ...).",
+    inputSchema: {
+      name: z.string().describe("Optional fuzzy filter on space name").optional(),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ name }) => {
+    // implementation in src/tools/list_spaces.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: don't cache. Space list is small and changes are user-driven

@@ -175,7 +175,7 @@ For a typical case (3 stages):
 - **Make required-param chains obvious from the signature.** E.g. the agent
   can't call `getAssignedCalculationMethods` without first calling
   `getAllocationVersions` to obtain a `versionId`. Reflecting that in the
-  Python signature (`list_calculation_methods(version_id: str)`) is clearer
+  TS signature (`list_calculation_methods({ version_id })`) is clearer
   than the raw HTTP shape where the dependency is documented but easy to
   overlook.
 

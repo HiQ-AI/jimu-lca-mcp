@@ -77,21 +77,26 @@ endpoint. Two paths:
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": True})
-async def edit_data_items(
-    edits: Annotated[
-        list[dict],
-        "List of edits. Each edit: {id, val, unit_id?, source_id?}.",
-    ],
-) -> str:
-    """Update one or more data items (values, units) in a case. Pass an
-    array of partial-update objects; the data-item `id` and the new
-    `val` are required, `unit_id` and `source_id` optional. Returns
-    per-row success/failure once batch semantics are characterised
-    (TODO: validate against a sandbox member before relying on partial-
-    failure behaviour)."""
-    ...
+```ts
+server.registerTool(
+  "edit_data_items",
+  {
+    description: "Update one or more data items (values, units) in a case. Pass an array of partial-update objects; the data-item `id` and the new `val` are required, `unit_id` and `source_id` optional. Returns per-row success/failure once batch semantics are characterised (TODO: validate against a sandbox member before relying on partial- failure behaviour).",
+    inputSchema: {
+      edits: z.array(z.object({
+        id: z.string().describe("Data-item id from list_data_items"),
+        val: z.number().describe("New numeric value"),
+        unit_id: z.string().describe("New unit id (optional)").optional(),
+        source_id: z.string().describe("New source enum id (optional)").optional(),
+      })).describe("List of partial edits to apply in batch."),
+    },
+    annotations: { destructiveHint: false, idempotentHint: true },
+  },
+  async ({ edits }) => {
+    // implementation in src/tools/edit_data_items.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Marked `destructiveHint=False / idempotentHint=True` tentatively —

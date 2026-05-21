@@ -96,14 +96,21 @@ invalid" — surface them all.
 
 Single tool, no aggregation:
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_units() -> str:
-    """Return all unit groups and their units. Reference data — call once per
-    session, cache the result. The `conversionFactor` on each unit is the
-    multiplier to convert that unit into the group's reference unit (the unit
-    with `isStandard=1`)."""
-    ...
+```ts
+server.registerTool(
+  "get_units",
+  {
+    description: "Return all unit groups and their units. Reference data — call once per session, cache the result. The `conversionFactor` on each unit is the multiplier to convert that unit into the group's reference unit (the unit with `isStandard=1`).",
+    inputSchema: {
+
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async (_args) => {
+    // implementation in src/tools/get_units.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Cache: TTL 1 hour at module level. The unit catalog changes rarely.

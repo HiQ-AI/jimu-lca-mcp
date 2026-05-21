@@ -68,13 +68,13 @@ Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md
 
 ## Quickstart (planned, not yet shipped)
 
-```bash
-# MCP host config — e.g. claude_desktop_config.json
+```jsonc
+// MCP host config — e.g. claude_desktop_config.json
 {
   "mcpServers": {
     "jimu-lca": {
-      "command": "uvx",
-      "args": ["--from", "jimu-lca-mcp@latest", "jimu-lca-mcp-server"],
+      "command": "npx",
+      "args": ["-y", "jimu-lca-mcp@latest"],
       "env": {
         "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx"
       }
@@ -86,10 +86,10 @@ Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md
 ```bash
 # CLI usage — same operations, scripted
 export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
-uvx --from jimu-lca-mcp@latest jimu-lca units
-uvx --from jimu-lca-mcp@latest jimu-lca versions
-uvx --from jimu-lca-mcp@latest jimu-lca products list --space <space-id>
-uvx --from jimu-lca-mcp@latest jimu-lca case overview <case-id>
+npx -y jimu-lca-mcp units
+npx -y jimu-lca-mcp versions
+npx -y jimu-lca-mcp products list --space <space-id>
+npx -y jimu-lca-mcp case overview <case-id>
 ```
 
 CLI surface mirrors the MCP tool surface 1:1; same parameter names, same
@@ -110,11 +110,16 @@ jimu-lca-mcp/
 │   │   ├── public/getAllUnits.md
 │   │   └── ...
 │   └── api-raw/                 # raw openResource/getById JSONs, source of truth
-├── jimu_lca_mcp/                # Python package (empty until Phase 1)
-│   ├── server.py                # MCP stdio entry
-│   ├── cli.py                   # CLI entry
+├── src/                         # TypeScript runtime (empty until Phase 1)
+│   ├── server.ts                #   MCP stdio server entry
+│   ├── cli.ts                   #   CLI entry (same operations as MCP tools)
+│   ├── auth.ts                  #   memberKey → `appId` header
+│   ├── api.ts                   #   shared HTTP client
+│   ├── tools/                   #   one file per MCP tool
 │   └── ...
-└── tests/                       # (empty until Phase 1)
+├── package.json                 # npm metadata; `bin` exposes jimu-lca-mcp
+├── tsconfig.json
+└── tests/                       # (gitignored — local-only test scaffolding)
 ```
 
 ## Reading order

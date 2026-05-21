@@ -111,18 +111,23 @@ list per data-kind:
 Deferred for v0 (`⏸` in [tools.md](../../architecture/tools.md)).
 When wrapped:
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def get_data_config(
-    case_id: Annotated[str, "Case id"],
-    stage_id: Annotated[str, "Stage id"],
-    element_id: Annotated[str, "Element id, from list_data_items or get_case_overview"],
-) -> str:
-    """Drill into a single data item to see all attached backings:
-    background dataset matches, inline LCI, material/transport flows,
-    validation messages. Call this when get_case_overview's backing
-    counts show a row of interest needs investigation."""
-    ...
+```ts
+server.registerTool(
+  "get_data_config",
+  {
+    description: "Drill into a single data item to see all attached backings: background dataset matches, inline LCI, material/transport flows, validation messages. Call this when get_case_overview's backing counts show a row of interest needs investigation.",
+    inputSchema: {
+      case_id: z.string().describe("Case id"),
+      stage_id: z.string().describe("Stage id"),
+      element_id: z.string().describe("Element id, from list_data_items or get_case_overview"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ case_id, stage_id, element_id }) => {
+    // implementation in src/tools/get_data_config.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Not folded into `get_case_overview` because the payload is per-item and

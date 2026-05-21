@@ -100,24 +100,21 @@ needs to fetch any kind of post-calc result.
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def list_case_calculation_methods(
-    case_id: Annotated[str, "Case id"],
-    version_id: Annotated[
-        str,
-        "Background-DB version id the case was calculated against. "
-        "Use list_background_db_versions to discover; note this may "
-        "differ from the case's configured version if the user has "
-        "re-calculated against a newer DB.",
-    ],
-) -> str:
-    """List LCIA methods that have been run on a case under a specific
-    background-DB version. Each entry includes the per-target-product
-    calculation records; the inner `id` field (caseCalMethodId) is what
-    `get_lcia_detail`, `get_sensitivity`, `publish_data`, and
-    `submit_uncertainty_analysis` consume."""
-    ...
+```ts
+server.registerTool(
+  "list_case_calculation_methods",
+  {
+    description: "List LCIA methods that have been run on a case under a specific background-DB version. Each entry includes the per-target-product calculation records; the inner `id` field (caseCalMethodId) is what `get_lcia_detail`, `get_sensitivity`, `publish_data`, and `submit_uncertainty_analysis` consume.",
+    inputSchema: {
+      case_id: z.string().describe("Case id"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/list_case_calculation_methods.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 Caching: don't cache. Calc history changes any time the agent or the

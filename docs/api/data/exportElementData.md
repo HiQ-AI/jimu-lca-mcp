@@ -51,21 +51,21 @@ local filename. Recommended convention:
 
 ### MCP tool mapping
 
-```python
-@mcp.tool(annotations={"readOnlyHint": True})
-async def export_elements_excel(
-    case_id: Annotated[str, "Case id, from get_case_overview / get_product"],
-    out_dir: Annotated[
-        str | None,
-        "Local directory to save the Excel file. Defaults to the user's "
-        "Downloads folder.",
-    ] = None,
-) -> str:
-    """Export the case's data items to an Excel file the user can edit
-    offline. Returns the local file path. The exported file can be
-    re-imported with `import_elements_excel` after the user updates
-    values."""
-    ...
+```ts
+server.registerTool(
+  "export_elements_excel",
+  {
+    description: "Export the case's data items to an Excel file the user can edit offline. Returns the local file path. The exported file can be re-imported with `import_elements_excel` after the user updates values.",
+    inputSchema: {
+      case_id: z.string().describe("Case id, from get_case_overview / get_product"),
+    },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ case_id }) => {
+    // implementation in src/tools/export_elements_excel.ts
+    return { content: [{ type: "text", text: "..." }] };
+  },
+);
 ```
 
 ### Threat-model notes
