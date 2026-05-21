@@ -18,4 +18,61 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/exportElementData?caseId=<case-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ HTTP/2 200, ~50 KB Excel (.xlsx) binary body
+   content-type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+```
+
+The endpoint returns a **binary Excel file**, not JSON. The MCP layer
+must:
+
+1. Stream the body to a local path
+2. Return the path (and maybe file size) to the agent
+3. Let the agent / user open it in Excel for editing
+
+The Excel format is the same one `importModelData` expects — round-trip
+edit flow: export → human edits in Excel → import.
+
+### Headers worth knowing
+
+| Header | Sample |
+|---|---|
+| `content-type` | `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| `content-length` | ~50,000 bytes for a small case |
+| `content-disposition` | not present in smoke; the MCP picks a sensible filename |
+
+The lack of `content-disposition` means the MCP has to synthesise the
+local filename. Recommended convention:
+`UPR-export-<case-id>-<YYYYMMDD>.xlsx`.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def export_elements_excel(
+    case_id: Annotated[str, "Case id, from get_case_overview / get_product"],
+    out_dir: Annotated[
+        str | None,
+        "Local directory to save the Excel file. Defaults to the user's "
+        "Downloads folder.",
+    ] = None,
+) -> str:
+    """Export the case's data items to an Excel file the user can edit
+    offline. Returns the local file path. The exported file can be
+    re-imported with `import_elements_excel` after the user updates
+    values."""
+    ...
+```
+
+### Threat-model notes
+
+- The Excel file is a real artifact on disk — log the path the agent
+  reports to the user, but **never** stream the binary back through
+  the MCP response (would balloon prompt tokens).
+- If the host can preview / open Excel in-app (Cortex Desktop can), pass
+  the path to the host's "open file" affordance; otherwise just print
+  the path and let the user open it manually.

@@ -18,4 +18,112 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/getDataConfigurationDetail
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"caseId": "<case-id>", "stageId": "<stage-id>", "elementId": "<element-id>"}
+
+→ success=true, code=200, dict with 7 sub-lists describing all backings of one data item
+```
+
+This is the **drill-down endpoint** for a single data item:
+`getDataConfigurationList` shows backing-data **counts** per row;
+`getDataConfigurationDetail` returns the **actual backing rows**, one
+list per data-kind:
+
+| Sub-list | What it holds |
+|---|---|
+| `processList` | Sub-processes inside this data item (when the item is itself a composite) |
+| `backgroundList` | Background-dataset matches (Ecoinvent / HiQLCD / …) |
+| `lciList` | Inline LCI rows (manually entered emissions) |
+| `slciList` | Simplified LCI rows |
+| `materialList` | Material-flow attachments with CO2-content coefficients |
+| `transportList` | Transport sub-flow rows |
+| `messageList` | Validation / warning messages on this data item |
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": {
+    "processList": [
+      {"elementId": "...", "categoryIds": "...", "categoryName": "...",
+       "processName": "...", "unitIds": "...", "unitGroupUuids": "...",
+       "dataIds": "..."}
+    ],
+    "backgroundList": [
+      {
+        "elementId": "...",
+        "categoryName": "原辅料",
+        "categoryIds": "15889393230266368",
+        "upElementUuid": "<background dataset uuid>",
+        "upElementName": "<bg display name (zh)>",
+        "upElementEnName": "<bg display name (en)>",
+        "equivalentCoefficient": "1",       // string-decimal
+        "conversionFactor": "1",            // string-decimal
+        "unitName": "kg",
+        "unitGroup": "...",
+        "location": "CN",                   // bg dataset region
+        "categoryType": "...",
+        "dataIds": "...",                   // back-pointer to the data-item id
+        "status": "..."
+      }
+    ],
+    "lciList": [],
+    "slciList": [
+      {"elementId": "...", "categoryName": "...", "categoryIds": "...",
+       "categoryType": "...", "dataIds": "...", "status": "..."}
+    ],
+    "materialList": [
+      {"categoryIds": "...", "categoryName": "...", "elementId": "...",
+       "co2ContentUnit": "...", "co2CoeUnit": "...", "hotValUnit": "...",
+       "carbonOxidationRate": "...", "dataIds": "...", "unitGroup": "...",
+       "categoryType": "...", "unitIds": "..."}
+    ],
+    "transportList": [
+      {"categoryIds": "...", "categoryName": "...", "dataIds": "...",
+       "categoryType": "...", "elementName": "<transport name>"}
+    ],
+    "messageList": []                       // validation messages, often empty
+  }
+}
+```
+
+### Quirks
+
+- **All 7 sub-lists are always present** — empty lists when there's
+  nothing of that kind attached, never `null`. Safe to iterate
+  unconditionally.
+- `backgroundList` is the most useful for the agent — it shows which
+  background dataset the data item is matched against, including the
+  region (`location`) and bilingual names. This is the "is the LCA
+  fully grounded in a background DB?" surface.
+- `messageList` carries validation warnings ("data not fully matched",
+  "unit mismatch", etc.). Surface to the agent so it can flag issues
+  before submitting calc.
+
+### MCP tool mapping
+
+Deferred for v0 (`⏸` in [tools.md](../../architecture/tools.md)).
+When wrapped:
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_data_config(
+    case_id: Annotated[str, "Case id"],
+    stage_id: Annotated[str, "Stage id"],
+    element_id: Annotated[str, "Element id, from list_data_items or get_case_overview"],
+) -> str:
+    """Drill into a single data item to see all attached backings:
+    background dataset matches, inline LCI, material/transport flows,
+    validation messages. Call this when get_case_overview's backing
+    counts show a row of interest needs investigation."""
+    ...
+```
+
+Not folded into `get_case_overview` because the payload is per-item and
+adding it would blow up the overview's size for cases with many items.

@@ -18,4 +18,85 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getElementList?processId=<process-id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, list of data items in the process
+```
+
+The smoked process held **27 data items** — the full exchange list
+(inputs + outputs + emissions) attached to one process. This is the
+read primitive for the data-input workflow: agent calls
+`getProcessList` → picks a process → calls this to see what's already
+filled, then calls `editElements` to update one or more rows.
+
+### Doc quirk — keyed by `processId`, not `caseId`/`stageId`
+
+Like `getProcessList`, this endpoint is keyed at the **process** level,
+not the case or stage. To get *all* data items in a case the agent has
+to fan out: case → stages → processes → data items.
+
+In the aggregator `get_case_overview` we use the lighter
+`getDataConfigurationList` per-stage (with backing counts only). For
+"give me the actual values of each exchange in this process",
+`getElementList` is the right call — direct, no aggregation needed.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "51677310255788038",         // data-item id — what editElements writes against
+      "caseId": "51677239114649605",
+      "processId": "51677310255788037",
+      "elementId": "42189759958331397",  // material/flow identity (te_element-equivalent)
+      "categoryId": "15889393230266368",
+      "categoryName": "原辅料",
+      "val": "1110.82720000000108484528", // string-stringified decimal (high precision)
+      "unitId": "41639498723282949",
+      "unitName": "kg",
+      "unitGroup": "...",
+      "sourceId": "15889436508619975",   // data-source enum (实测 / 文献 / 估算 / ...)
+      "sourceName": "...",
+      "inOutType": "INPUT",              // INPUT / OUTPUT — direction of the exchange
+      "elementName": "<material name>"
+    }
+  ]
+}
+```
+
+### Quirks
+
+- `val` is high-precision string-decimal (~20 digits past the point in
+  smoke). **Always Decimal, never float** for these.
+- `sourceId` maps to a tenant-level dictionary of "where does this
+  number come from" (实测 = measured / 文献 = literature / 估算 = estimate
+  / 等). The id-to-label mapping is in the open platform's data
+  dictionary; surface `sourceName` for display.
+- `inOutType` is on most rows but not in the upstream doc table —
+  observed but undocumented. INPUT / OUTPUT is the only set seen.
+- The list is **not paginated** — `data` is the whole exchange list for
+  the process. Processes with hundreds of exchanges may need pagination
+  later (no current support).
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_data_items(
+    process_id: Annotated[str, "Process id, from getProcessList / get_case_overview"],
+) -> str:
+    """List all data items (exchanges) attached to a process: inputs,
+    outputs, emissions. Each row has the current value, unit, source
+    (measured / literature / etc.), and the data-item `id` needed by
+    edit_data_items. Use after `get_case_overview` when the agent wants
+    to see or edit specific values inside a process."""
+    ...
+```
+
+Caching: don't cache. Values are the active editing surface — staleness
+would mislead the agent into proposing edits against old numbers.

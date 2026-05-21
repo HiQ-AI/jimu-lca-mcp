@@ -18,4 +18,77 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+This is a **write** endpoint and a bulk-write at that — one call
+replaces (or merges?) the entire case's data items from an Excel file.
+Documented from upstream docs only; correctness validation deferred
+until a sandbox member is available.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/importModelData
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: multipart/form-data
+Form fields:
+  caseId: <case id>
+  file: <Excel file, .xlsx, the format exportElementData returns>
+
+→ success=true, code=200 expected on full success
+```
+
+The file format expected is **exactly what `exportElementData` returns**
+— the round-trip is by design: export → human edits in Excel → import.
+
+### Open questions
+
+The upstream docs don't specify:
+
+- **Merge vs replace** semantics. If the user removed rows from the
+  Excel, does the import delete those data items, or just leave them?
+- **Schema validation**. What does the response say when the Excel has
+  malformed data (e.g. wrong unit, missing required column)?
+- **Partial success**. Single-error-rolls-back-all, or row-by-row?
+
+These need validation before we trust the import path. Until then,
+`import_elements_excel` should:
+
+1. Refuse to run unless the user has explicitly confirmed
+2. Always be preceded by `export_elements_excel` so there's a backup
+   of the pre-import state
+3. Run `get_case_overview` after to surface the new state
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"destructiveHint": True, "idempotentHint": False})
+async def import_elements_excel(
+    case_id: Annotated[str, "Case id, from get_case_overview / get_product"],
+    file_path: Annotated[
+        str,
+        "Local path to the Excel file (typically obtained from "
+        "export_elements_excel after user edits).",
+    ],
+) -> str:
+    """Bulk-update a case's data items from an Excel file. The file must
+    match the schema returned by export_elements_excel — round-trip
+    flow: export → user edits in Excel → import.
+
+    DESTRUCTIVE: this can wipe out or overwrite many data items in one
+    call. The companion skill enforces an explicit user-confirmation
+    gate; do not call this without going through that gate."""
+    ...
+```
+
+### Skill rule (mirrors hiq-editor's "never auto-submit")
+
+The `jimu-lca-product-carbon` skill, when written, must require the
+agent to:
+
+1. Call `export_elements_excel` first to capture the pre-import state
+2. Show the user a diff summary of what's about to change
+3. Wait for explicit "OK 导入" before calling `import_elements_excel`
+4. Run `get_case_overview` after to confirm the new state
+
+Same pattern hiq-editor uses for `submit_review_tool`.

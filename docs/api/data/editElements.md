@@ -18,4 +18,91 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Not smoked
+
+This is a **write** endpoint and would modify data items on the
+maintainer's prod workspace. Documented from upstream docs only;
+correctness validation deferred until a sandbox member is available.
+
+### Contract (from upstream docs)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/editElements
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  JSON array — each element is a partial data-item update
+
+[
+  {
+    "id": "<data-item id, from list_data_items / getElementList>",
+    "unitId": "<unit id, from get_units>",
+    "val": <number>,                  // decimal
+    "sourceId": "<source enum id>"    // optional — sourceId mapping is undocumented
+  },
+  ...
+]
+
+→ success=true, code=200 expected on full batch success
+```
+
+### Batch semantics — open question
+
+The doc says it accepts an array but does not specify:
+
+- **Atomicity** — if one row fails, does the whole batch roll back?
+- **Partial failure** — does the response report per-row status?
+- **Idempotency** — re-sending the same array, does it no-op or
+  re-apply?
+- **Order** — are updates applied in array order? (matters for
+  inter-dependent rows, e.g. if multiple rows reference the same
+  elementId)
+
+These are all "test before you trust" items for the write-path
+validation phase. The MCP wrapper should document the observed
+behaviour once smoked, and surface partial-failure responses honestly
+to the agent.
+
+### `sourceId` is enum-but-undocumented
+
+The doc says "枚举值：待确认" (enum values: TBD). The smoke of
+`getElementList` showed `sourceId` values like `15889436508619975` on
+real rows, but the open platform doesn't expose a list-sources
+endpoint. Two paths:
+
+1. Treat `sourceId` as **optional** in the MCP wrapper. If the agent
+   doesn't pass it, omit from the body — the backend preserves the
+   existing value.
+2. Surface the observed `sourceId` from `list_data_items` so the agent
+   can pass-through unchanged.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"destructiveHint": False, "idempotentHint": True})
+async def edit_data_items(
+    edits: Annotated[
+        list[dict],
+        "List of edits. Each edit: {id, val, unit_id?, source_id?}.",
+    ],
+) -> str:
+    """Update one or more data items (values, units) in a case. Pass an
+    array of partial-update objects; the data-item `id` and the new
+    `val` are required, `unit_id` and `source_id` optional. Returns
+    per-row success/failure once batch semantics are characterised
+    (TODO: validate against a sandbox member before relying on partial-
+    failure behaviour)."""
+    ...
+```
+
+Marked `destructiveHint=False / idempotentHint=True` tentatively —
+revisit once batch semantics are smoked. If non-idempotent, mark
+destructive and require the skill's "ask before submit" gate.
+
+### Skill rule
+
+The `jimu-lca-product-carbon` skill (when written) should treat batch
+edits as a **show-the-user-then-confirm** action — same gate the
+hiq-editor skill applies to `submit_review_tool`. Never auto-batch-edit
+without explicit user confirmation; the agent should show a diff
+summary ("I'm about to change these N rows: row1 val 100→120, row2
+unit kg→t...") and wait for OK.
