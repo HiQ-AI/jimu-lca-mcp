@@ -130,7 +130,10 @@ jimu-lca-mcp/
    skip and why
 3. [docs/architecture/tools.md](docs/architecture/tools.md) — 22-entry tool /
    CLI subcommand surface
-4. [docs/api/README.md](docs/api/README.md) — per-endpoint deep dives
+4. [docs/architecture/phase1-design.md](docs/architecture/phase1-design.md) —
+   runtime design: three entry points (stdio MCP + CLI + Cloudflare Worker)
+   from one shared core, Connector-readiness, phase order
+5. [docs/api/README.md](docs/api/README.md) — per-endpoint deep dives
 
 ## License
 
