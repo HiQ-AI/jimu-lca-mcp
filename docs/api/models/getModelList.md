@@ -18,4 +18,114 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getModelList
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, 500 models in `data`
+```
+
+The smoked tenant returned **500 models**. That's an order-of-magnitude
+larger than the agent can usefully reason about in one tool call — the
+LLM will burn 30k+ tokens just reading the list and still won't know
+which one to pick. Treat raw `data` as the *catalog*, surface to the
+agent via filter + summarise, not raw dump.
+
+### Catalog scale — design implication
+
+Filtering / paginating happens **server-side** when the user passes
+`name`, and **client-side** otherwise (the endpoint returns all 500 in
+one shot with no `page`/`size` knobs in upstream docs).
+
+Two MCP modes worth exposing:
+
+1. `list_models(name=<keyword>)` — passes the keyword through; expect
+   modest result sets (e.g. "钢板" → ~5-10 models)
+2. `list_models()` (no filter) — returns a **summary view**: count by
+   `categoryName` + `industryName`, plus first 20 rows. The agent uses
+   this as an orientation, then re-calls with `name` to drill in.
+
+Returning the full 500-row dump to the LLM by default is the wrong move
+(prompt-cost + selection accuracy both suffer).
+
+### Two model flavours: `modelFlag`
+
+| `modelFlag` | Meaning |
+|---|---|
+| `own` | A model the tenant authored / uploaded |
+| `EC` | A model 易碳 ships as part of the platform catalog |
+
+This distinction matters for the agent — "我的模型" (own) is what the user
+recognises by name; "EC" models are platform templates the user picked
+once but didn't author. Surface the flag in summaries.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": [
+    {
+      "id": "47212659233464326",
+      "uuid": "e09e396f-...",
+      "name": "<model display name>",
+      "categoryName": "...",         // model classification (e.g. 金属制品、机械设备)
+      "industryName": "...",         // industry sector (e.g. 制造业)
+      "boundaryName": "摇篮到大门",   // system boundary (matches the enum used by create_process)
+      "boundaryId": "1519532547259908121",
+      "unitId": "41639498723282949", // declared unit id (matches getAllUnits unitList[].id)
+      "unitName": "kg",
+      "industryId": "58907799840319887",
+      "categoryId": "16358793212735261",
+      "reportDate": "2025-01~2025-07",  // reporting period (free-form string)
+      "icoPath": "",                    // model icon URL (relative)
+      "description": "...",
+      "consultProductName": "<reference product>",
+      "consultProductCoefficient": "1", // string-as-decimal
+      "unitType": "1621385735695621126",
+      "unitComment": "...",
+      "modelType": "41524144274399259",
+      "modelFlag": "own",               // own | EC
+      "standardName": "...",            // method standard (e.g. PEF, GHG protocol)
+      "standardVersion": "...",
+      "systemModelName": "...",
+      "tagNameAll": "...",              // comma-joined tag list
+      "standardAppLocation": "..."
+    }
+  ]
+}
+```
+
+### Quirks
+
+- The doc-listed fields are a strict subset of what the endpoint actually
+  returns (smoke shows `standardName`, `tagNameAll`, `systemModelName`
+  etc. — not in the doc table). Don't strip unknown fields when caching.
+- `consultProductCoefficient` is a string-as-decimal; parse to Decimal at
+  the MCP layer.
+- `reportDate` is a free-form string like `2025-01~2025-04` — not a
+  parseable date. Surface as-is.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_models(
+    name: Annotated[str | None, "Optional fuzzy filter on model name."] = None,
+    flag: Annotated[
+        Literal["own", "EC"] | None,
+        "Filter to own-models (tenant-authored) or EC-models (platform-shipped).",
+    ] = None,
+) -> str:
+    """List LCA process templates the tenant can use. When no filter is
+    provided the full catalog may run into hundreds of models; the tool
+    returns a summary view (category counts + first 20 rows) by default.
+    Pass `name` for keyword search, `flag` to scope to own vs platform
+    models. Returned `id` is what create_product / case-creation flows
+    consume as a starting template."""
+    ...
+```
+
+Caching: per-`(name, flag)` keyed; TTL ~5 minutes. Catalog changes are
+infrequent but not as stable as units / versions.

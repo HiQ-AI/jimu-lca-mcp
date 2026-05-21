@@ -18,4 +18,99 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+POST https://open.ecdigit.com/openapi/lca/v3/getBrandPage
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+       Content-Type: application/json
+Body:  {"page": 1, "pageSize": 3}
+
+→ success=true, code=200, total=646 across 65 pages (default size=10)
+```
+
+### Doc quirks
+
+1. **Upstream doc requires `groupId` + `spaceId`** in the body. Smoke shows
+   that **omitting both** also works — the endpoint then returns all
+   products across all spaces / groups the member can see. Treat both as
+   optional in the MCP signature; pass them through when the agent has
+   scoped to a specific space.
+2. **Param name mismatch**: docs say `size`, but `pageSize` is also
+   accepted (both worked in smoke). Either parameter survives, but stick
+   to the doc name `size` to match the SDK style elsewhere.
+3. **Pagination envelope is top-level**, not nested in `data`. The shape
+   is `{success, code, message, page, size, totalPageNum, total, data}` —
+   `data` is the rows array. Most paginated APIs nest the envelope; this
+   one doesn't.
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "page": 1, "size": 10, "totalPageNum": 65, "total": 646,
+  "data": [
+    {
+      "id": "51677239113863173",       // brand (product) id
+      "uuid": "7e87b88f-...",
+      "name": "<product display name>",
+      "industryId": "58907799840319887",
+      "industryName": "制造业",
+      "categoryId": "16358793212735261",
+      "categoryName": "金属制品、机械设备",
+      "topCompanyId": "140",
+      "companyId": "140",
+      "createId": "<user-id>",
+      "createTime": "2026-05-20 17:30:25",
+      "co2Content": "253442.02558966763408",   // *** GWP already on the list row ***
+      "co2Unit": "kg CO2-Eq",
+      "spaceId": "51199845299023877",
+      "groupId": "51199845300596741",
+      "spaceName": "<space display name>",
+      "num": 1,                                // production quantity (units = product's declared unit)
+      "consultProductCoefficient": "1"
+    }
+  ]
+}
+```
+
+### Headline finding: GWP is on the list row
+
+`co2Content` + `co2Unit` are populated **on every product list row** —
+the agent doesn't have to drill into the brand → case → LCIA chain just
+to see the headline GWP. For tasks like "find the highest-emitting product
+in this space" the agent can answer from `list_products` alone.
+
+`co2Content` is a **string-stringified decimal** with high precision
+(20 digits past the point in the sample). Parse to `Decimal`, never `float`.
+
+### Doc vs reality field deltas
+
+The doc table lists 13 row fields; the actual response has 19. Extras
+the doc misses:
+`uuid`, `topCompanyId`, `companyId`, `co2Content`, `co2Unit`,
+`consultProductCoefficient`. Document them as observed-but-undocumented;
+treat as stable enough to surface but log when they're absent.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def list_products(
+    space_id: Annotated[str | None, "Optional space id to scope to (from list_spaces)"] = None,
+    group_id: Annotated[str | None, "Optional group id (folder inside a space)"] = None,
+    name: Annotated[str | None, "Optional fuzzy name filter"] = None,
+    page: Annotated[int, "Page number (1-indexed)"] = 1,
+    size: Annotated[int, "Page size (default 10, server caps unknown)"] = 10,
+) -> str:
+    """Paginate the tenant's product catalog, optionally scoped to a space
+    or a group. Returns each product's metadata plus the headline `co2Content`
+    GWP value with its unit (`co2Unit`), so headline-only questions can be
+    answered without drilling into LCA cases. Returned `id` is the brandId
+    consumed by `get_product` / `get_case_overview`."""
+    ...
+```
+
+Caching: don't cache. Product list is the most volatile read endpoint —
+new products show up as users author them.

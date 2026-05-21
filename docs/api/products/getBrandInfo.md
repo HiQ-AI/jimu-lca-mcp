@@ -18,4 +18,115 @@
 
 ## Integration notes
 
-_(not yet documented)_
+### Smoke (2026-05-21, prod)
+
+```
+GET https://open.ecdigit.com/openapi/lca/v3/getBrandInfo?brandId=<id>
+Header: appId: app:xxxxxxxxxxxxxxxxxxx
+→ success=true, code=200, data is a single product object with embedded LCA-case list
+
+# Without brandId
+→ {"success":false,"code":"500","message":"brandId不能为空"}
+```
+
+### What this endpoint gives you over `getBrandPage`
+
+`getBrandPage` returns the product metadata; this returns the **same
+metadata plus** an embedded `lcaBrandCases` array — the LCA cases that
+exist under this product. The case rows carry status (`待计算` /
+`计算中` / `已计算` / `已发布` / …), boundary, unit, declared-unit
+comment, and the background-DB version used.
+
+So in the agent's flow, `getBrandInfo` is the "drill in" call: "user
+picked product X, show me what LCAs exist on it so I can pick one to
+work on."
+
+### Response shape (verified)
+
+```json
+{
+  "success": true, "code": "200", "message": "成功",
+  "data": {
+    "id": "51677239113863173",
+    "uuid": "7e87b88f-...",
+    "name": "<product name>",
+    "industryId": "58907799840319887",
+    "industryName": "制造业",
+    "categoryId": "16358793212735261",
+    "categoryName": "金属制品、机械设备",
+    "topCompanyId": "140",
+    "companyId": "140",
+    "createId": "<user-id>",
+    "createTime": "2026-05-20 17:30:25",
+    "spaceId": "51199845299023877",
+    "spaceName": "<space name>",
+    "groupId": "51199845300596741",
+    "groupName": "默认分组",
+    "lcaBrandCases": [
+      {
+        "id": "51677239114649605",            // case id — what get_case_overview takes
+        "uuid": "e5d2b416-...",
+        "brandId": "51677239113863173",
+        "reportDate": "2026-01~2026-05",       // free-form
+        "boundaryId": "1519532547259908121",
+        "boundaryName": "摇篮到大门",
+        "unitId": "41639739781206021",
+        "unitName": "kg",                      // case-level declared unit
+        "unitComment": "<declared unit comment>",
+        "consultProductName": "<reference product>",
+        "consultProductCoefficient": "1",      // string-decimal
+        "status": "158894365086199856",        // status id — see below
+        "statusName": "待计算",                // human-readable
+        "description": "",
+        "orderNum": 1,
+        "unitType": "1621385735695621126",
+        "unitTypeName": "功能单位",
+        "versionId": "41712481948418053",      // background DB versionId
+        "versionName": "Ecoinvent3.10",
+        "calMethodName": null                  // populated after a calc runs
+      }
+    ]
+  }
+}
+```
+
+### `status` / `statusName` mapping (observed)
+
+| `statusName` | Meaning |
+|---|---|
+| `待计算` | Created but no calc yet |
+| `计算中` | Calc task running |
+| `已计算` | Trial calc done; LCIA available |
+| `已发布` | Result published as a background dataset |
+| `计算失败` | Calc errored |
+
+The numeric `status` ids are stable but undocumented; rely on
+`statusName` when surfacing to the agent.
+
+### Quirks
+
+- The doc table for the case sub-row omits `uuid` / `orderNum` /
+  `calMethodName` / `carbonEmissions` / `carbonUnitName` — smoke showed
+  these present. Don't strip.
+- `description` on either the product or its cases is often empty
+  (`""`). Surface as null to the agent for cleaner prompts.
+- `lcaBrandCases` can be empty (a product registered but no LCA started
+  yet) — handle empty-list explicitly in the tool output.
+
+### MCP tool mapping
+
+```python
+@mcp.tool(annotations={"readOnlyHint": True})
+async def get_product(
+    brand_id: Annotated[str, "Product (brand) id, from list_products"],
+) -> str:
+    """Fetch full product metadata plus the list of LCA cases that exist
+    under it. Each case row carries id, status, boundary, unit, and the
+    background-DB version it uses — the `id` is what `get_case_overview`
+    consumes when the user picks one to dive into."""
+    ...
+```
+
+Caching: don't cache. Case status changes (user runs a calc → 待计算 →
+计算中 → 已计算 → 已发布) and stale data here would mislead the agent
+about what's safe to re-run.
