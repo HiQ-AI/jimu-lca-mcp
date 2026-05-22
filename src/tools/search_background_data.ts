@@ -29,7 +29,8 @@ export const searchBackgroundData: ToolDef<typeof Args, unknown> = {
   description:
     "Search the background LCI database (e.g. Ecoinvent) for datasets matching " +
     "a material/flow name, under a given DB version. Returns candidates with " +
-    "their `uuid` (for binding via match_background), Chinese/English name, " +
+    "their `uuid` and `background_data_id` (BOTH required to bind via " +
+    "match_backgrounds), Chinese/English name, " +
     "region, unit, and the dataset's own per-unit `co2Content` (handy for " +
     "picking the right one). Use this when building/curating a custom model or " +
     "to replace a wrong/default background match (e.g. the closest plastic " +
@@ -53,6 +54,7 @@ export const searchBackgroundData: ToolDef<typeof Args, unknown> = {
       size: args.size,
     });
     return (rows ?? []).map((r) => ({
+      background_data_id: r.id,
       uuid: r.uuid,
       name_cn: r.nameCn,
       name_en: r.name,

@@ -4,7 +4,8 @@ import { callManager } from "../api.js";
 
 const Binding = z.object({
   element_id: z.string().describe("Data-item elementId to bind (list_data_items / get_case_overview)."),
-  background_uuid: z.string().describe("Chosen dataset uuid (search_background_data)."),
+  background_uuid: z.string().describe("Chosen dataset uuid (search_background_data.uuid)."),
+  background_data_id: z.string().describe("Chosen dataset id (search_background_data.background_data_id) — REQUIRED: the platform resolves the LCI by this id, not the uuid."),
   background_name: z.string().describe("Chosen dataset CN name (search_background_data.name_cn)."),
   version_id: z.string().describe("Background-DB version the dataset belongs to."),
   location: z.string().optional().describe("Region (search_background_data.location)."),
@@ -27,19 +28,15 @@ interface DataDetail {
 export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
   name: "match_backgrounds",
   description:
-    "EXPERIMENTAL. Bind background LCI datasets to a stage's flows (import_model " +
-    "leaves them unbound → 未配置上游背景数据 → no result). Batched: pass every " +
-    "flow of the stage in one call — for each it loads the item's full " +
-    "data-config (getDataDetail) and keeps the slci/material/transport sub-config " +
-    "intact, then saves all in one saveConfiguration (manager API). Pick datasets " +
-    "with Cortex + search_background_data, choosing one whose unit_group matches " +
-    "the flow (search returns unit + unit_group; many same-named datasets differ " +
-    "in unit). STATUS: works for 能源 (energy) flows — verified binding electricity " +
-    "clean. KNOWN ISSUE for 原辅料 (material) flows: all datasets still report " +
-    "背景数据单位组不一致 because the item carries a material-carbon path " +
-    "(co2ContentUnit kgC/kg + carbonOxidationRate) that conflicts with an LCI " +
-    "background bind — the materialList needs different handling (TODO). For " +
-    "material flows, bind in the web UI until fixed. Verify with validate_case.",
+    "EXPERIMENTAL — not reliable yet. Posts saveConfiguration (manager API) to " +
+    "bind a stage's flows to background datasets, batched, sending the dataset's " +
+    "uuid + backgroundDataId + conversionFactor. Despite mirroring the web UI's " +
+    "payload, material (原辅料) flows still report 背景数据单位组不一致 and the calc " +
+    "produces no result (a 21-dataset sweep all failed); the exact " +
+    "saveConfiguration semantics aren't fully reproduced. Until resolved, do the " +
+    "background BIND in the 积木 web UI. The DISCOVERY half (search_background_data) " +
+    "is reliable — use it to tell the user which datasets (name/region/co2/uuid) " +
+    "to bind in the UI.",
   inputSchema: Args,
   annotations: { destructiveHint: false, idempotentHint: true },
   async handler(args, ctx) {
@@ -61,10 +58,12 @@ export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
       backgroundList.push({
         ...bg0,
         upElementUuid: b.background_uuid,
+        backgroundDataId: b.background_data_id,
         upElementName: b.background_name,
         location: b.location ?? "",
         unitName: b.unit ?? "",
         equivalentCoefficient: "1",
+        conversionFactor: "1",
         upVersionId: b.version_id,
         useAiRecommend: false,
         oldName: "-",
