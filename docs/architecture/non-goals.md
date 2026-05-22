@@ -41,52 +41,37 @@ appkey that Group 1 needs), and creates a **private** space by default. That
 makes it a legitimate agent action, not tenant governance. Member/role writes
 above stay excluded — those touch *other people's* access.
 
-## Group 5 — Custom products / no-template modeling (future support — prod not ready)
+## Group 5 — Custom / no-template modeling (now wrapped via the manager API)
 
-Creating a **自定义产品** (custom product with no model template, then building
-its stage/process/data-item structure) is **not** possible through the open
-platform API today. Verified by testing: `addBrand` (`/lca/v3/addBrand`) hard-
-requires a real catalog `modelId` — `modelId` of `0`/`-1` → code 30049
-("数据不存在"), empty/missing → 30084 ("必要参数不能为空"). There is no
-open-API endpoint to create a custom product or add stages/processes.
+The open API (`open.ecdigit.*/openapi`, appId header) can't build custom
+structure — `addBrand` hard-requires a catalog `modelId` (`0`/`-1` → 30049,
+empty → 30084), and none of the 32 LCA endpoints add a stage/process/data-item
+(`editElements`/`importModelData` edit *values* only). That capability lives on
+a **separate internal manager API** (`cloud.ecdigit.*/ecdigit/api/managerPro/*`)
+behind a **Bearer JWT** — and **the JWT is mintable from the memberKey**
+(`/open/memberToken/get`). So the MCP wraps the whole thing; the caller still
+supplies only a memberKey (`api.getMemberToken` mints+caches the JWT,
+`api.callManager` posts to the manager host — see `env.resolveManagerBaseUrl`).
 
-The web UI does it via a **separate internal API**, not the open platform:
+Wrapped + verified end-to-end (`create_custom_product → add_case →
+add_case_process → add_data_items → edit_data_items → calculate_case`):
 
-```
-POST https://cloud.ecdigit.com/ecdigit/api/managerPro/brand/addBrandData
-Auth: Authorization: Bearer <JWT>      # NOT the appId/memberKey header
-Body: { "groupId", "spaceId", "name", "industryId", "categoryId" }   # no modelId
-```
+| Tool | Manager endpoint | Makes |
+|---|---|---|
+| `create_custom_product` | `/managerPro/brand/addBrandData` | no-template product shell |
+| `add_case` | `/managerPro/brand/addCase` | the LCA case + life-cycle stages (returns caseId) |
+| `add_case_process` | `/managerPro/brand/addCaseProcess` | a process in a stage (returns process id) |
+| `add_data_items` | `/managerPro/brand/addBatchElement` | flow rows in a process |
 
-- It's a **different host + auth scheme** (`cloud.ecdigit.com/.../managerPro/*`
-  with a web-session Bearer JWT) than the open API (`open.ecdigit.com/openapi/*`
-  with `appId: <memberKey>`).
-- A Bearer JWT *can* be minted from the memberKey via `/open/memberToken/get`,
-  so a programmatic path is conceivable — but per the platform team the
-  custom-product internal endpoints are **dev-only; not yet released to
-  production**. The created shell also starts with **0 cases** (structure is
-  built in a second step), so full no-template support needs the
-  structure-building internal endpoints too, not just `addBrandData`.
+**Last-mile gap (next):** resolving a flow's `element_id` for `add_data_items`
+needs the platform's flow/element **search** (the web UI has it; request not
+captured yet). Until wrapped, supply known element ids, or prefer a template
+(whose flows come pre-populated).
 
-**Editing an existing case's structure is the same situation.** Verified by
-enumerating all 32 LCA open-API endpoints: there is **no** add/remove
-stage / process / data-item endpoint. `editElements` only edits the *values*
-of the template's existing rows; `importModelData` only bulk-edits values from
-the exported Excel (it does not add structure); `copyCase`/`deleteCase` operate
-on whole cases. So after `create_product` instantiates a template, the agent
-can change **values** but not **structure** via the open API. Adding/removing a
-stage/process/data-item to tailor a template to a real product is a web-UI /
-internal-API action today.
-
-**When prod ships these:** wrap `create_custom_product(...)` + structure tools
-(add/remove stage/process/data-item), minting the Bearer JWT from the memberKey
-internally. Until then:
-- **Value adaptation** of a template → fully API (editElements), works now.
-- **Structure adaptation** (template doesn't match the real product) →
-  web-UI-guided hand-off (agent co-designs the changes, user applies them in
-  the web UI, agent resumes via API).
-- Lead with template search (`list_models`, BM25-ranked) — the catalog is large
-  (500+) and a close-enough template usually exists, needing only value edits.
+**Guidance:** still prefer a template (`create_product`) whenever `list_models`
+(BM25-ranked, 500+ catalog) has a close fit — it pre-builds the structure and
+its flows, avoiding per-flow `element_id` discovery. The custom-modeling tools
+are the genuine no-template path for novel products.
 
 ## Group 3 — Endpoints with unclear semantics until v1
 
