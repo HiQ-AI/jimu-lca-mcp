@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ToolDef } from "../types.js";
 import { get } from "../api.js";
+import { getProductLcia } from "./get_product_lcia.js";
 
 const Args = z.object({
   brand_id: z.string().describe("Product (brand) id — for the headline GWP (co2Content)."),
@@ -32,9 +33,28 @@ export const getResult: ToolDef<typeof Args, unknown> = {
   inputSchema: Args,
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
-    // headline number (single-product read)
+    // headline number (single-product read); fall back to the LCIA result, since
+    // co2Content lags the calc (both evals hit a null co2Content on a done calc).
     const prod = await get<ProductInfo>(ctx, "/lca/v3/getBrandInfo", { brandId: args.brand_id });
-    const gwp = prod?.co2Content && prod.co2Content !== "" ? prod.co2Content : null;
+    let gwp: string | null = prod?.co2Content && prod.co2Content !== "" ? prod.co2Content : null;
+    let gwpSource = gwp ? "co2Content" : null;
+    if (gwp == null) {
+      try {
+        // pass defaults explicitly — calling .handler bypasses zod's .default().
+        const lcia = await getProductLcia.handler({ product: args.brand_id, indicator: "GWP100", case_index: 0 } as never, ctx);
+        const rows = (lcia as { rows?: Array<{ influenceFactorName: string; summary: string }> }).rows ?? [];
+        const gwp100 = rows
+          .filter((r) => r.influenceFactorName.includes("GWP100"))
+          .map((r) => Number(r.summary))
+          .filter((n) => !Number.isNaN(n));
+        if (gwp100.length) {
+          gwp = String(Math.max(...gwp100)); // the total (largest), not a per-stage sub-row
+          gwpSource = "lcia";
+        }
+      } catch {
+        /* no LCIA yet — leave null */
+      }
+    }
 
     // provenance: walk the model's input items by data source
     const stages = await get<Stage[]>(ctx, "/lca/v3/getCaseStage", { caseId: args.case_id });
@@ -55,6 +75,7 @@ export const getResult: ToolDef<typeof Args, unknown> = {
     const dq = quality(bySource, inputs);
     return {
       gwp: gwp,
+      gwp_source: gwpSource,
       gwp_unit: prod?.co2Unit ?? "kg CO2-Eq / declared unit",
       resolved: gwp != null,
       data_quality: dq,
