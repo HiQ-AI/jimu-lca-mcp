@@ -24,13 +24,14 @@ interface DataConfig {
 export const matchBackground: ToolDef<typeof Args, unknown> = {
   name: "match_background",
   description:
-    "Bind a background LCI dataset to a data item — REQUIRED for inputs to " +
-    "contribute (import_model leaves flows unbound → 未配置上游背景数据 → no " +
-    "result). Pick the dataset with Cortex's matching + search_background_data, " +
-    "then bind it here. Fetches the item's current data-config, sets the chosen " +
-    "background, and saves (manager API saveConfiguration, Bearer token from the " +
-    "memberKey). Run for every material/energy input, then validate_case " +
-    "(未配置上游背景数据 should clear) → calculate_case.",
+    "EXPERIMENTAL — incomplete. Binds a background dataset to a data item via " +
+    "saveConfiguration. It clears 未配置上游背景数据 but currently produces " +
+    "背景数据单位组不一致 (the calc still won't resolve): the platform's config " +
+    "payload needs the dataset's allocationMethod + unit (uuid) + a unit-group " +
+    "that matches the flow, which search_background_data doesn't return and the " +
+    "config-UI lookups (lcaUpPageList) don't filter reliably. Until reworked, do " +
+    "the final background BIND in the 积木 web UI (search_background_data is fine " +
+    "for discovery). Run validate_case after to confirm.",
   inputSchema: Args,
   annotations: { destructiveHint: false, idempotentHint: true },
   async handler(args, ctx) {
