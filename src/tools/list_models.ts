@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { ToolDef } from "../types.js";
 import { get } from "../api.js";
+import { rankBm25 } from "../search.js";
 
 const Args = z.object({
   name: z
     .string()
     .optional()
-    .describe("Optional fuzzy filter on model name. Recommended on the smoked tenant: 500+ models exist; without a filter the LLM sees a summary-only view (see `summarize`)."),
+    .describe("Search query — BM25-ranked over model name + category + industry (CJK + latin). 500+ models exist and the upstream has no server-side search, so always pass a query (the product, its material, or its category, e.g. '光伏' / '钢' / '电池') to find a template; without it you only get a 20-row sample + counts."),
   flag: z
     .enum(["own", "EC"])
     .optional()
@@ -59,21 +60,24 @@ export const listModels: ToolDef<typeof Args, ModelListResult> = {
   inputSchema: Args,
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
-    // NOTE: getModelList does NOT support a server-side `name` filter — passing
-    // `name` as a query param returns code 102 with empty data. So we fetch the
-    // full catalog and filter client-side (matches name / category / industry).
+    // NOTE: getModelList has NO server-side text search — passing `name` as a
+    // query param returns code 102 with empty data. So we fetch the full
+    // catalog and rank locally with BM25 (this is the MCP layer earning its
+    // keep: compensating for a missing upstream capability).
     const all = (await get<Model[]>(ctx, "/lca/v3/getModelList")) ?? [];
-    let filtered = args.flag ? all.filter((m) => m.modelFlag === args.flag) : all;
+    const flagged = args.flag ? all.filter((m) => m.modelFlag === args.flag) : all;
     if (args.name) {
-      const q = args.name.toLowerCase();
-      filtered = filtered.filter((m) =>
-        [m.name, m.categoryName, m.industryName]
-          .some((f) => String(f ?? "").toLowerCase().includes(q)),
+      const ranked = rankBm25(
+        args.name,
+        flagged,
+        (m) => `${m.name} ${m.categoryName} ${m.industryName}`,
       );
+      return { total: ranked.length, rows: ranked };
     }
-    if (args.name || !args.summarize || filtered.length <= 20) {
-      return { total: filtered.length, rows: filtered };
+    if (!args.summarize || flagged.length <= 20) {
+      return { total: flagged.length, rows: flagged };
     }
+    const filtered = flagged;
     const tally = (k: keyof Model) => {
       const o: Record<string, number> = {};
       for (const m of filtered) {
