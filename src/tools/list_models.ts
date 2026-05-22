@@ -59,8 +59,18 @@ export const listModels: ToolDef<typeof Args, ModelListResult> = {
   inputSchema: Args,
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
-    const all = await get<Model[]>(ctx, "/lca/v3/getModelList", { name: args.name });
-    const filtered = args.flag ? all.filter((m) => m.modelFlag === args.flag) : all;
+    // NOTE: getModelList does NOT support a server-side `name` filter — passing
+    // `name` as a query param returns code 102 with empty data. So we fetch the
+    // full catalog and filter client-side (matches name / category / industry).
+    const all = (await get<Model[]>(ctx, "/lca/v3/getModelList")) ?? [];
+    let filtered = args.flag ? all.filter((m) => m.modelFlag === args.flag) : all;
+    if (args.name) {
+      const q = args.name.toLowerCase();
+      filtered = filtered.filter((m) =>
+        [m.name, m.categoryName, m.industryName]
+          .some((f) => String(f ?? "").toLowerCase().includes(q)),
+      );
+    }
     if (args.name || !args.summarize || filtered.length <= 20) {
       return { total: filtered.length, rows: filtered };
     }
