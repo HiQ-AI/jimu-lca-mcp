@@ -84,6 +84,14 @@ async function call<T = unknown>(
     );
   }
 
+  // Some write endpoints (e.g. editElements) return an empty 200 body. That is
+  // SUCCESS, not a protocol error — treat an empty/whitespace body as an
+  // empty-data success envelope rather than failing to parse it.
+  const raw = await resp.text();
+  if (!raw.trim()) {
+    return { success: true, code: "200", message: "", data: undefined as unknown as T } as OpenApiEnvelope<T>;
+  }
+
   const ct = resp.headers.get("content-type") ?? "";
   if (!ct.includes("json")) {
     // Binary endpoints (e.g. exportElementData) bypass this client; call
@@ -94,7 +102,7 @@ async function call<T = unknown>(
     );
   }
 
-  const envelope = (await resp.json()) as OpenApiEnvelope<T>;
+  const envelope = JSON.parse(raw) as OpenApiEnvelope<T>;
 
   if (!envelope.success) {
     throw new JimuLcaError(

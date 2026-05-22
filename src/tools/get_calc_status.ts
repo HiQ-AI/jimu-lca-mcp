@@ -4,6 +4,11 @@ import { callManagerGet, getUserUuid } from "../api.js";
 
 const Args = z.object({
   case_id: z.string().describe("Case id whose calculation status to check."),
+  wait: z
+    .boolean()
+    .default(false)
+    .describe("If true, BLOCK and poll internally until the calc is done/failed (up to max_wait_seconds) — call this ONCE after calculate_case instead of ending your turn and polling by hand. The async calc takes minutes."),
+  max_wait_seconds: z.number().default(300).describe("Cap for wait mode (default 300s)."),
 });
 
 interface InboxMsg {
@@ -36,23 +41,34 @@ export const getCalcStatus: ToolDef<typeof Args, unknown> = {
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
     const uuid = await getUserUuid(ctx);
-    const msgs = await callManagerGet<InboxMsg[] | { list?: InboxMsg[]; records?: InboxMsg[] }>(
-      ctx,
-      `/message/messages/${uuid}`,
-      { page: 1, size: 20, readType: 0 },
-    );
-    const list: InboxMsg[] = Array.isArray(msgs)
-      ? msgs
-      : (msgs?.list ?? msgs?.records ?? []);
-    // billId is "<brandId>-<caseId>"; match the case.
-    const mine = list
-      .filter((m) => (m.billId ?? "").includes(args.case_id) || (m.content ?? "").includes(args.case_id))
-      .sort((a, b) => String(b.createTime ?? "").localeCompare(String(a.createTime ?? "")));
-    const latest = mine[0];
+    const readOnce = async () => {
+      const msgs = await callManagerGet<InboxMsg[] | { list?: InboxMsg[]; records?: InboxMsg[] }>(
+        ctx,
+        `/message/messages/${uuid}`,
+        { page: 1, size: 20, readType: 0 },
+      );
+      const list: InboxMsg[] = Array.isArray(msgs) ? msgs : (msgs?.list ?? msgs?.records ?? []);
+      const latest = list
+        .filter((m) => (m.billId ?? "").includes(args.case_id) || (m.content ?? "").includes(args.case_id))
+        .sort((a, b) => String(b.createTime ?? "").localeCompare(String(a.createTime ?? "")))[0];
+      return latest;
+    };
+
+    let latest = await readOnce();
+    let status = latest ? classify(latest.content ?? "") : "unknown";
+    // Wait mode: block + poll until done/failed (or timeout) so the caller need
+    // not end its turn mid-calc and re-poll by hand.
+    if (args.wait) {
+      const deadline = Date.now() + args.max_wait_seconds * 1000;
+      while (status !== "done" && status !== "failed" && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 15_000));
+        latest = await readOnce();
+        status = latest ? classify(latest.content ?? "") : "unknown";
+      }
+    }
     if (!latest) {
       return { status: "unknown", message: "no calc-task message found for this case yet", case_id: args.case_id };
     }
-    const status = classify(latest.content ?? "");
     return {
       status,
       message: latest.content ?? "",
@@ -61,8 +77,8 @@ export const getCalcStatus: ToolDef<typeof Args, unknown> = {
         status === "failed"
           ? "Calc FAILED. Common cause: method_id not from list_calculation_methods for THIS case's version (accepted at submit, fails async). Re-check the method, then recalculate."
           : status === "done"
-            ? "Calc done — read the number via get_product_lcia / get_result."
-            : "Calc not finished; check again shortly.",
+            ? "Calc done — read the number via get_result / get_product_lcia."
+            : "Still running/queued — call again with wait:true to block until done, or check shortly.",
     };
   },
   cli: { summary: "Check a case's async calculation status (done/failed/running)." },
