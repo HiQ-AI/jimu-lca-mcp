@@ -9,6 +9,7 @@
  */
 
 import { JimuLcaError, type ToolContext } from "./types.js";
+import { resolveManagerBaseUrl } from "./env.js";
 
 interface OpenApiEnvelope<T = unknown> {
   success: boolean;
@@ -165,6 +166,78 @@ export async function postPaginated<T = unknown>(
     total: env.total ?? (env.data?.length ?? 0),
     totalPageNum: env.totalPageNum ?? 1,
   };
+}
+
+// ─── Internal manager API (custom products + structure editing) ──────────
+//
+// These live on a different host (cloud.ecdigit.*/ecdigit/api) behind a Bearer
+// JWT minted from the memberKey, NOT the open API's appId header. The MCP layer
+// hides this entirely: the caller still only supplies a memberKey.
+
+interface CachedToken {
+  bearer: string;
+  expMs: number;
+}
+const _tokenCache = new Map<string, CachedToken>();
+
+/** Mint (and cache) a Bearer JWT from the memberKey via the open API's
+ *  `/open/memberToken/get`. The token embeds an `exp`; we decode it to cache
+ *  until ~1 min before expiry, re-minting as needed. */
+export async function getMemberToken(ctx: ToolContext): Promise<string> {
+  const cached = _tokenCache.get(ctx.memberKey);
+  if (cached && cached.expMs - 60_000 > Date.now()) return cached.bearer;
+
+  const resp = await ctx.fetch(`${ctx.baseUrl}/open/memberToken/get`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ memberKey: ctx.memberKey }),
+  });
+  if (!resp.ok) {
+    throw new JimuLcaError("transport", `HTTP ${resp.status} minting member token`);
+  }
+  const env = (await resp.json()) as OpenApiEnvelope<string>;
+  if (!env.success || typeof env.data !== "string" || !env.data.startsWith("Bearer")) {
+    throw new JimuLcaError("auth", env.message || "could not mint member token from memberKey", undefined, env.code);
+  }
+  const bearer = env.data;
+  // Decode the JWT exp (seconds) to set cache TTL; fall back to 30 min.
+  let expMs = Date.now() + 30 * 60_000;
+  try {
+    const payload = JSON.parse(Buffer.from(bearer.split(".")[1]!, "base64").toString());
+    if (payload.exp) expMs = payload.exp * 1000;
+  } catch {
+    /* keep fallback */
+  }
+  _tokenCache.set(ctx.memberKey, { bearer, expMs });
+  return bearer;
+}
+
+/** POST to the internal manager API with a minted Bearer JWT. Used for custom
+ *  products + structure editing, which the open API does not expose. */
+export async function callManager<T = unknown>(
+  ctx: ToolContext,
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const bearer = await getMemberToken(ctx);
+  const base = resolveManagerBaseUrl(ctx.baseUrl);
+  const resp = await ctx.fetch(`${base}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: bearer,
+      Origin: base.replace(/\/ecdigit\/api$/, ""),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    throw new JimuLcaError("transport", `HTTP ${resp.status} ${resp.statusText} calling manager ${path}`);
+  }
+  const env = (await resp.json()) as OpenApiEnvelope<T>;
+  if (!env.success) {
+    throw new JimuLcaError("upstream", env.message || `manager API returned success=false (code ${env.code})`, undefined, env.code);
+  }
+  return env.data;
 }
 
 /**

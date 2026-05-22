@@ -29,5 +29,15 @@ export function resolveBaseUrl(
   return BASE_URLS.prod;
 }
 
+// Resolve the internal manager API base from the open-API base. Custom products
+// + structure editing live on a separate host (cloud.ecdigit.*, path
+// /ecdigit/api) behind a Bearer JWT, not the open API (open.ecdigit.*/openapi,
+// appId header). Derive one from the other: open -> cloud, /openapi ->
+// /ecdigit/api. e.g. https://open.ecdigit.com/openapi becomes
+// https://cloud.ecdigit.com/ecdigit/api (and open-pre -> cloud-pre, .cn dev).
+export function resolveManagerBaseUrl(openBaseUrl: string): string {
+  return openBaseUrl.replace("://open", "://cloud").replace(/\/openapi$/, "/ecdigit/api");
+}
+
 /** Library version stamp surfaced via the `version` subcommand + MCP server `serverInfo`. */
 export const VERSION = "0.1.0-alpha.1";
