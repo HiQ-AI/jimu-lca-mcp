@@ -34,6 +34,7 @@ import { searchBackgroundData } from "./search_background_data.js";
 import { searchBackgrounds } from "./search_backgrounds.js";
 import { matchBackgrounds } from "./match_background.js";
 import { getModelItems } from "./get_model_items.js";
+import { getResult } from "./get_result.js";
 import { importModel } from "./import_model.js";
 import { listProducts } from "./list_products.js";
 import { getProduct } from "./get_product.js";
@@ -103,6 +104,7 @@ export const allTools: ToolDef[] = [
 
   // Convenience aggregators
   getProductLcia,
+  getResult,
   getTopContributors,
 ] as unknown as ToolDef[];
 
