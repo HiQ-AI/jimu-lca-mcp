@@ -28,6 +28,7 @@ import { addCase } from "./add_case.js";
 import { addCaseProcess } from "./add_case_process.js";
 import { addDataItems } from "./add_data_items.js";
 import { validateCase } from "./validate_case.js";
+import { searchBackgroundData } from "./search_background_data.js";
 import { listProducts } from "./list_products.js";
 import { getProduct } from "./get_product.js";
 import { getCaseOverview } from "./get_case_overview.js";
@@ -77,6 +78,7 @@ export const allTools: ToolDef[] = [
   addCase,
   addCaseProcess,
   addDataItems,
+  searchBackgroundData,
   validateCase,
   copyCase,
   deleteCase,
