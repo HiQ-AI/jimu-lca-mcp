@@ -64,23 +64,23 @@ export const calculateCase: ToolDef<typeof Args, unknown> = {
   inputSchema: Args,
   annotations: { destructiveHint: false, idempotentHint: false },
   async handler(args, ctx) {
-    // 1. Resolve target product if not provided.
+    // 1. Resolve target product + capture product names for the reference-flow check.
+    const disposalStages = await get<DisposalStage[]>(
+      ctx,
+      "/lca/v3/getCaseDisposals",
+      { caseId: args.case_id },
+    );
+    const products = disposalStages
+      .flatMap((s) => s.children)
+      .filter((c) => c.categoryName === "产品");
+    if (products.length === 0) {
+      throw new JimuLcaError(
+        "validation",
+        `case ${args.case_id} has no product entries in getCaseDisposals; nothing to calculate.`,
+      );
+    }
     let target = args.target_product;
     if (!target) {
-      const disposalStages = await get<DisposalStage[]>(
-        ctx,
-        "/lca/v3/getCaseDisposals",
-        { caseId: args.case_id },
-      );
-      const products = disposalStages
-        .flatMap((s) => s.children)
-        .filter((c) => c.categoryName === "产品");
-      if (products.length === 0) {
-        throw new JimuLcaError(
-          "validation",
-          `case ${args.case_id} has no product entries in getCaseDisposals; nothing to calculate.`,
-        );
-      }
       if (products.length > 1) {
         throw new JimuLcaError(
           "validation",
@@ -118,6 +118,21 @@ export const calculateCase: ToolDef<typeof Args, unknown> = {
     const detail = await get<CaseDetail>(ctx, "/lca/v3/getCaseDetail", {
       id: args.case_id,
     });
+
+    // 3a. Reference-flow guard. A custom-built case can validate clean (0 修改项)
+    //     yet the async calc silently fails to resolve if the declared
+    //     consultProductName doesn't match a 产品 output element (the FU has no
+    //     reference flow). This is the #1 from-scratch silent-failure cause.
+    const refMatch = products.some((p) => p.name === detail.consultProductName);
+    if (!refMatch) {
+      throw new JimuLcaError(
+        "validation",
+        `consultProductName "${detail.consultProductName}" does not match any 产品 output ` +
+          `(${products.map((p) => `"${p.name}"`).join(", ")}). The calc would validate but ` +
+          `silently fail to resolve — the declared functional unit has no reference flow. ` +
+          `Set add_case's consult_product_name to exactly one of the 产品 output names, or rename the output.`,
+      );
+    }
 
     // 3b. Guard: method_id MUST belong to THIS case's background version. A
     //     wrong-version method id is accepted at submit but the async calc then
