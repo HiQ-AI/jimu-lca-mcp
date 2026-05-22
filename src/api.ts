@@ -240,6 +240,29 @@ export async function callManager<T = unknown>(
   return env.data;
 }
 
+/** GET from the internal manager API with a minted Bearer JWT. */
+export async function callManagerGet<T = unknown>(
+  ctx: ToolContext,
+  path: string,
+  query?: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
+  const bearer = await getMemberToken(ctx);
+  const base = resolveManagerBaseUrl(ctx.baseUrl);
+  const url = new URL(`${base}${path}`);
+  if (query) for (const [k, v] of Object.entries(query)) if (v !== undefined) url.searchParams.set(k, String(v));
+  const resp = await ctx.fetch(url.toString(), {
+    headers: { Authorization: bearer, Origin: base.replace(/\/ecdigit\/api$/, "") },
+  });
+  if (!resp.ok) {
+    throw new JimuLcaError("transport", `HTTP ${resp.status} ${resp.statusText} calling manager ${path}`);
+  }
+  const env = (await resp.json()) as OpenApiEnvelope<T>;
+  if (!env.success) {
+    throw new JimuLcaError("upstream", env.message || `manager API returned success=false (code ${env.code})`, undefined, env.code);
+  }
+  return env.data;
+}
+
 /**
  * Binary response wrapper (e.g. `exportElementData` returns Excel). Returns
  * the raw `Response` so the caller can stream / save to disk as needed.
