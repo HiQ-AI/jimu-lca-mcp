@@ -12,6 +12,7 @@ import type { ToolDef } from "../types.js";
 import { getUnits } from "./get_units.js";
 import { listBackgroundDbVersions } from "./list_background_db_versions.js";
 import { listCalculationMethods } from "./list_calculation_methods.js";
+import { listIndustries } from "./list_industries.js";
 import { checkConnectivity } from "./check_connectivity.js";
 import { getCalcStatus } from "./get_calc_status.js";
 
@@ -26,6 +27,7 @@ import { listModels } from "./list_models.js";
 // Products + cases
 import { createProduct } from "./create_product.js";
 import { createCustomProduct } from "./create_custom_product.js";
+import { createBlankProduct } from "./create_blank_product.js";
 import { addCase } from "./add_case.js";
 import { addCaseProcess } from "./add_case_process.js";
 import { addDataItems } from "./add_data_items.js";
@@ -64,6 +66,7 @@ export const allTools: ToolDef[] = [
   checkConnectivity,
   listBackgroundDbVersions,
   listCalculationMethods,
+  listIndustries,
   listSpaces,
   listSpaceMembers,
   createSpace,
@@ -84,6 +87,7 @@ export const allTools: ToolDef[] = [
   // Writes
   createProduct,
   createCustomProduct,
+  createBlankProduct,
   addCase,
   addCaseProcess,
   addDataItems,
