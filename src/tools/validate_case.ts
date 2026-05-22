@@ -1,31 +1,10 @@
 import { z } from "zod";
 import type { ToolDef } from "../types.js";
-import { callManagerGet } from "../api.js";
+import { getCaseValidation } from "../api.js";
 
 const Args = z.object({
   case_id: z.string().describe("Case id to validate (from create_product / add_case / get_case_overview)."),
 });
-
-interface ValidateDetail {
-  score?: number;
-  modifiedList?: unknown[];
-  confirmList?: unknown[];
-  ignoreList?: unknown[];
-}
-
-/** Pull a human-readable message out of a validation item (shape varies:
- *  sometimes a plain string, sometimes an object with message/cnName/name). */
-function msg(item: unknown): string {
-  if (typeof item === "string") return item;
-  if (item && typeof item === "object") {
-    const o = item as Record<string, unknown>;
-    for (const k of ["message", "msg", "content", "cnName", "name", "ruleName"]) {
-      if (typeof o[k] === "string") return o[k] as string;
-    }
-    return JSON.stringify(o);
-  }
-  return String(item);
-}
 
 export const validateCase: ToolDef<typeof Args, unknown> = {
   name: "validate_case",
@@ -41,15 +20,11 @@ export const validateCase: ToolDef<typeof Args, unknown> = {
   inputSchema: Args,
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
-    const d = await callManagerGet<ValidateDetail>(
-      ctx,
-      "/managerPro/caseValidate/getValidateDetail",
-      { caseId: args.case_id },
-    );
-    const must = (d.modifiedList ?? []).map(msg);
-    const warn = (d.confirmList ?? []).map(msg);
+    const v = await getCaseValidation(ctx, args.case_id);
+    const must = v.mustFix;
+    const warn = v.warnings;
     return {
-      score: d.score ?? null,
+      score: v.score,
       ready: must.length === 0,
       must_fix: must,
       must_fix_count: must.length,

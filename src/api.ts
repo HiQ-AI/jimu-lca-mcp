@@ -240,6 +240,41 @@ export async function callManager<T = unknown>(
   return env.data;
 }
 
+/** Pull a human-readable message out of a validation item (shape varies:
+ *  plain string, or object with message/cnName/name/ruleName). */
+function validationMsg(item: unknown): string {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    const o = item as Record<string, unknown>;
+    for (const k of ["message", "msg", "content", "cnName", "name", "ruleName"]) {
+      if (typeof o[k] === "string") return o[k] as string;
+    }
+    return JSON.stringify(o);
+  }
+  return String(item);
+}
+
+export interface CaseValidation {
+  score: number | null;
+  mustFix: string[];
+  warnings: string[];
+}
+
+/** Run the platform's authoritative model validation on a case (manager API).
+ *  Shared by validate_case and calculate_case's pre-submit gate. */
+export async function getCaseValidation(ctx: ToolContext, caseId: string): Promise<CaseValidation> {
+  const d = await callManagerGet<{ score?: number; modifiedList?: unknown[]; confirmList?: unknown[] }>(
+    ctx,
+    "/managerPro/caseValidate/getValidateDetail",
+    { caseId },
+  );
+  return {
+    score: d.score ?? null,
+    mustFix: (d.modifiedList ?? []).map(validationMsg),
+    warnings: (d.confirmList ?? []).map(validationMsg),
+  };
+}
+
 /** GET from the internal manager API with a minted Bearer JWT. */
 export async function callManagerGet<T = unknown>(
   ctx: ToolContext,
