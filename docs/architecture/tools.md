@@ -1,6 +1,6 @@
 # MCP tool surface (v0)
 
-The 32 LCA-runtime endpoints map to **22 MCP tools** in v0 (20 primitives wrapping the surface, plus 2 convenience aggregators for high-frequency user intents). Status legend:
+The 32 LCA-runtime endpoints map to **23 MCP tools** in v0 (21 primitives wrapping the surface, plus 2 convenience aggregators for high-frequency user intents). Status legend:
 
 - 📖 read-only — safe to call freely
 - ✍️ write — `destructiveHint=True`; skill rules will require user confirmation
@@ -37,16 +37,18 @@ drove tool decisions:
 | 📖 `list_background_db_versions` | `GET /lca/v3/getAllocationVersions` | Background database versions (Ecoinvent 3.10 / 3.11 / HiQ 1.2 / combined). Returns `versionId` needed by `list_calculation_methods` and `addCaseCalculationTask`. |
 | 📖 `list_calculation_methods(version_id)` | `GET /lca/v3/getAssignedCalculationMethods` | LCIA methods (e.g. IPCC GWP100, CML-IA, etc.) available to the tenant under a given background DB version. `versionId` is required (it sits in the "请求参数" sub-table separately from the "请求头" table). |
 
-### Space management — read only (2 / 7 upstream endpoints — 5 writes deferred to web UI)
+### Space management (3 / 7 upstream endpoints — 4 membership/governance writes deferred to web UI)
 
 | Tool | Upstream | Notes |
 |---|---|---|
 | 📖 `list_spaces` | `GET /lca/v3/getProjectSpaces` | Lists workspaces the member can see. Returns name, id, permission level, group list. |
 | 📖 `list_space_members(space_id)` | `GET /lca/v3/getMembersBySpaceId` | Lists members of a specific workspace. |
+| ✍️ `create_space(name, description?)` | `POST /lca/v3/addProjectSpace` | Creates a **private** workspace owned by the memberKey (+ a default root group). Gives the user an isolated space so modeling work doesn't land in shared org-public spaces. Skill rule: confirm name before creating — there is no delete-space tool (web-UI only). |
 
-`addProjectSpace` / `addMemberToSpaceBatch` (also used for role updates) /
-`getAllUser` / `deleteMemberFromSpaceBatch` are **not wrapped**. See
-[non-goals.md](non-goals.md#group-2--space-membership-writes-5-endpoints).
+`addMemberToSpaceBatch` (also used for role updates) / `getAllUser` /
+`deleteMemberFromSpaceBatch` are **not wrapped** — those are teammate/role
+governance the user does in the web UI. See
+[non-goals.md](non-goals.md#group-2--space-membership-writes).
 
 ### Model library (1 / 1 upstream endpoint)
 

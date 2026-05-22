@@ -13,9 +13,10 @@ import { getUnits } from "./get_units.js";
 import { listBackgroundDbVersions } from "./list_background_db_versions.js";
 import { listCalculationMethods } from "./list_calculation_methods.js";
 
-// Space management — read-only
+// Space management
 import { listSpaces } from "./list_spaces.js";
 import { listSpaceMembers } from "./list_space_members.js";
+import { createSpace } from "./create_space.js";
 
 // Models
 import { listModels } from "./list_models.js";
@@ -51,6 +52,7 @@ export const allTools: ToolDef[] = [
   listCalculationMethods,
   listSpaces,
   listSpaceMembers,
+  createSpace,
   listModels,
 
   // Product + case

@@ -18,11 +18,15 @@
 
 ## Integration notes
 
-**Not wrapped (see [non-goals.md](../../architecture/non-goals.md)).**
+**Wrapped as `create_space` (MCP tool + `jimu-lca create-space` CLI subcommand).**
 
-Workspace creation is a one-off configuration step the user does in the web UI. The agent never needs to create spaces.
+Originally deferred to the web UI, then re-evaluated (see [non-goals.md](../../architecture/non-goals.md#group-2--space-membership-writes)) when a real Cortex task surfaced: a user needs their own **private** workspace so their modeling doesn't pollute the shared org-public spaces.
 
-The contract above stays in this file as a reference catalog entry —
-useful if a Cortex use case ever forces re-evaluating the exclusion
-(see the "What changes this list" section of non-goals.md). For now,
-this endpoint has no MCP tool and no companion CLI subcommand.
+Key facts that make this an agent-safe write:
+
+- **Auth = user-level memberKey** (`appId` header), the same credential every other tool uses — *not* the company appkey that the Group 1 bootstrap endpoints need.
+- Body is just `name` / `description` (both optional upstream; the wrapper requires `name`).
+- The created space is **私有 (private)** by default (`dicPermissionId` = the private permission id) and comes with a default root group — exactly the isolation the user wants.
+- No teammate/role writes involved, so it doesn't touch other people's access.
+
+Skill rule: confirm the workspace name with the user before creating — there is **no** delete-space tool (removal is web-UI only).

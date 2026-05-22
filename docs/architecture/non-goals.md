@@ -19,11 +19,10 @@ These 5 are wrapped as **CLI subcommands** if and when an admin needs a
 scriptable bootstrap — but **never** as MCP tools. The container env never
 holds the company-level appkey.
 
-## Group 2 — Space membership writes (5 endpoints)
+## Group 2 — Space membership writes (4 endpoints)
 
 | Endpoint | Why excluded |
 |---|---|
-| `POST /lca/v3/addProjectSpace` | Creating a new workspace is a one-off configuration action; users do it in the web UI. |
 | `GET /lca/v3/getAllUser` | Enumerates all users in the tenant (privacy-sensitive). Agent should pick from `getMembersBySpaceId` instead. |
 | `POST /lca/v3/addMemberToSpaceBatch` (also used for role updates) | Adding teammates to a space is governance, not an agent task. |
 | `POST /lca/v3/deleteMemberFromSpaceBatch` | Removing teammates is governance. |
@@ -31,6 +30,16 @@ holds the company-level appkey.
 
 Reads (`list_spaces`, `list_space_members`) **are** exposed — the agent often
 needs to scope its work to "the workspace I'm in".
+
+`addProjectSpace` **is now wrapped** as `create_space` (was excluded in v0).
+Re-evaluated per the "What changes this list" trigger below: a concrete Cortex
+task — *"give me my own private workspace so my modeling doesn't pollute the
+shared org-public spaces"* — can't be done with read-only space tools. The
+endpoint takes only `name` / `description`, authenticates with the user-level
+memberKey (same `appId` header as every other tool — **not** the company
+appkey that Group 1 needs), and creates a **private** space by default. That
+makes it a legitimate agent action, not tenant governance. Member/role writes
+above stay excluded — those touch *other people's* access.
 
 ## Group 3 — Endpoints with unclear semantics until v1
 

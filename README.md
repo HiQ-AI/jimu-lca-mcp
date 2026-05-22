@@ -58,10 +58,12 @@ Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md
   with the integrator who provisions access for an end user, not with the
   runtime MCP/CLI. See
   [docs/architecture/non-goals.md](docs/architecture/non-goals.md).
-- **Space membership write operations** (`addProjectSpace`,
-  `addMemberToSpaceBatch`, `deleteMemberFromSpaceBatch`, role updates). These
-  are governance actions an end user performs in the web UI; the MCP only
-  reads space lists / membership.
+- **Teammate / role write operations** (`addMemberToSpaceBatch`,
+  `deleteMemberFromSpaceBatch`, role updates). These touch *other people's*
+  access — governance an end user performs in the web UI; the MCP only reads
+  space membership. (`addProjectSpace` **is** wrapped as `create_space` — it
+  creates a *private* space owned by the caller, so it's a legitimate agent
+  action, not governance. See [non-goals.md](docs/architecture/non-goals.md#group-2--space-membership-writes).)
 - **Bearer JWT lifecycle endpoints** (`memberToken/get`, `memberToken/refresh`).
   The memberKey is the long-lived credential; short-lived JWTs are only
   needed for SaaS-UI redirects, which an agent doesn't drive directly.
