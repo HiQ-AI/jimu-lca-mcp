@@ -13,6 +13,7 @@ const Args = z.object({
 interface BgRow {
   id: string;
   uuid: string;
+  standardUuid: string;
   name: string;
   nameCn: string;
   locationName: string;
@@ -29,8 +30,9 @@ export const searchBackgroundData: ToolDef<typeof Args, unknown> = {
   description:
     "Search the background LCI database (e.g. Ecoinvent) for datasets matching " +
     "a material/flow name, under a given DB version. Returns candidates with " +
-    "their `uuid` and `background_data_id` (BOTH required to bind via " +
-    "match_backgrounds), Chinese/English name, " +
+    "their `bind_uuid` (the standardUuid) and `background_data_id` (BOTH required " +
+    "to bind via match_backgrounds — the platform binds by standardUuid, not the " +
+    "dataset's own uuid), Chinese/English name, " +
     "region, unit, and the dataset's own per-unit `co2Content` (handy for " +
     "picking the right one). Use this when building/curating a custom model or " +
     "to replace a wrong/default background match (e.g. the closest plastic " +
@@ -54,8 +56,11 @@ export const searchBackgroundData: ToolDef<typeof Args, unknown> = {
       size: args.size,
     });
     return (rows ?? []).map((r) => ({
+      // Both required to bind via match_backgrounds. bind_uuid is the dataset's
+      // standardUuid (NOT its own uuid) — the value the platform binds by.
+      bind_uuid: r.standardUuid,
       background_data_id: r.id,
-      uuid: r.uuid,
+      dataset_uuid: r.uuid,
       name_cn: r.nameCn,
       name_en: r.name,
       location: r.locationName,

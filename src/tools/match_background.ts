@@ -4,8 +4,8 @@ import { callManager } from "../api.js";
 
 const Binding = z.object({
   element_id: z.string().describe("Data-item elementId to bind (list_data_items / get_case_overview)."),
-  background_uuid: z.string().describe("Chosen dataset uuid (search_background_data.uuid)."),
-  background_data_id: z.string().describe("Chosen dataset id (search_background_data.background_data_id) — REQUIRED: the platform resolves the LCI by this id, not the uuid."),
+  background_uuid: z.string().describe("search_background_data.bind_uuid (the dataset's standardUuid). MUST be bind_uuid, NOT dataset_uuid — the platform binds by standardUuid."),
+  background_data_id: z.string().describe("Chosen dataset id (search_background_data.background_data_id) — REQUIRED: the platform resolves the LCI by this id."),
   background_name: z.string().describe("Chosen dataset CN name (search_background_data.name_cn)."),
   version_id: z.string().describe("Background-DB version the dataset belongs to."),
   location: z.string().optional().describe("Region (search_background_data.location)."),
@@ -28,15 +28,14 @@ interface DataDetail {
 export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
   name: "match_backgrounds",
   description:
-    "EXPERIMENTAL — not reliable yet. Posts saveConfiguration (manager API) to " +
-    "bind a stage's flows to background datasets, batched, sending the dataset's " +
-    "uuid + backgroundDataId + conversionFactor. Despite mirroring the web UI's " +
-    "payload, material (原辅料) flows still report 背景数据单位组不一致 and the calc " +
-    "produces no result (a 21-dataset sweep all failed); the exact " +
-    "saveConfiguration semantics aren't fully reproduced. Until resolved, do the " +
-    "background BIND in the 积木 web UI. The DISCOVERY half (search_background_data) " +
-    "is reliable — use it to tell the user which datasets (name/region/co2/uuid) " +
-    "to bind in the UI.",
+    "Bind background LCI datasets to a stage's flows — REQUIRED for inputs to " +
+    "contribute (import_model leaves them unbound → 未配置上游背景数据 → no " +
+    "result). Batched: pass every flow of the stage in one call. For each it " +
+    "loads the item's full data-config (getDataDetail), sets the chosen dataset " +
+    "(by standardUuid + backgroundDataId), and saves all in one saveConfiguration " +
+    "(manager API). Pick datasets with Cortex + search_background_data, passing " +
+    "its `bind_uuid` (standardUuid) as background_uuid and `background_data_id`. " +
+    "Then validate_case to confirm 未配置上游背景数据 + 单位组不一致 are clear.",
   inputSchema: Args,
   annotations: { destructiveHint: false, idempotentHint: true },
   async handler(args, ctx) {
