@@ -34,9 +34,12 @@ export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
     "intact, then saves all in one saveConfiguration (manager API). Pick datasets " +
     "with Cortex + search_background_data, choosing one whose unit_group matches " +
     "the flow (search returns unit + unit_group; many same-named datasets differ " +
-    "in unit). KNOWN ISSUE: even with matching unit_groups this can still leave " +
-    "背景数据单位组不一致 (a residual saveConfiguration-payload detail) — so " +
-    "verify with validate_case, and if it persists do the bind in the web UI.",
+    "in unit). STATUS: works for 能源 (energy) flows — verified binding electricity " +
+    "clean. KNOWN ISSUE for 原辅料 (material) flows: all datasets still report " +
+    "背景数据单位组不一致 because the item carries a material-carbon path " +
+    "(co2ContentUnit kgC/kg + carbonOxidationRate) that conflicts with an LCI " +
+    "background bind — the materialList needs different handling (TODO). For " +
+    "material flows, bind in the web UI until fixed. Verify with validate_case.",
   inputSchema: Args,
   annotations: { destructiveHint: false, idempotentHint: true },
   async handler(args, ctx) {
