@@ -130,8 +130,10 @@ jimu-lca-mcp/
    host integration patterns, Settings-UI design
 2. [docs/architecture/non-goals.md](docs/architecture/non-goals.md) — what we
    skip and why
-3. [docs/architecture/tools.md](docs/architecture/tools.md) — 22-entry tool /
+3. [docs/architecture/tools.md](docs/architecture/tools.md) — 23-entry tool /
    CLI subcommand surface
+3b. [docs/architecture/workflow-walkthrough.md](docs/architecture/workflow-walkthrough.md) —
+   a real traced end-to-end run + the gotchas the companion skill must encode
 4. [docs/architecture/phase1-design.md](docs/architecture/phase1-design.md) —
    runtime design: three entry points (stdio MCP + CLI + Cloudflare Worker)
    from one shared core, Connector-readiness, phase order

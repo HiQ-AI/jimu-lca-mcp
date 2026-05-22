@@ -228,7 +228,11 @@ default, not a vow.
 
 ## What we deferred (⏸)
 
-- `get_data_config` — singular drilldown; wrap once we see a recurring need
+- `get_data_config` — singular drilldown. **Now a known blocker, not just a
+  nice-to-have:** the [workflow walkthrough](workflow-walkthrough.md) found
+  that an agent can't complete the fill→calculate flow without enumerating +
+  binding a background source per data item, which this endpoint feeds.
+  Promote before the companion skill ships.
 - `publish_data` — semantics unclear in docs; need a real case
 - `submit_uncertainty_analysis` — async; need polling story
 
