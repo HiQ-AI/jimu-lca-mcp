@@ -4,7 +4,8 @@ import { post } from "../api.js";
 
 const Edit = z.object({
   id: z.string().describe("Data-item id, from list_data_items."),
-  val: z.number().describe("New numeric value."),
+  // Accept number OR numeric string — LLMs frequently pass "0.06"; coerce in the handler.
+  val: z.union([z.number(), z.string()]).describe("New numeric value (number or numeric string)."),
   unit_id: z.string().optional().describe("New unit id (from get_units). Omit to preserve."),
   source_id: z.string().optional().describe("New source enum id. Omit to preserve."),
 });
@@ -27,7 +28,7 @@ export const editDataItems: ToolDef<typeof Args, unknown> = {
     // Upstream takes a JSON ARRAY directly (not wrapped in an envelope).
     const payload = args.edits.map((e) => ({
       id: e.id,
-      val: e.val,
+      val: Number(e.val),
       ...(e.unit_id !== undefined ? { unitId: e.unit_id } : {}),
       ...(e.source_id !== undefined ? { sourceId: e.source_id } : {}),
     }));
