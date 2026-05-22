@@ -24,6 +24,9 @@ import { listModels } from "./list_models.js";
 // Products + cases
 import { createProduct } from "./create_product.js";
 import { createCustomProduct } from "./create_custom_product.js";
+import { addCase } from "./add_case.js";
+import { addCaseProcess } from "./add_case_process.js";
+import { addDataItems } from "./add_data_items.js";
 import { listProducts } from "./list_products.js";
 import { getProduct } from "./get_product.js";
 import { getCaseOverview } from "./get_case_overview.js";
@@ -70,6 +73,9 @@ export const allTools: ToolDef[] = [
   // Writes
   createProduct,
   createCustomProduct,
+  addCase,
+  addCaseProcess,
+  addDataItems,
   copyCase,
   deleteCase,
   calculateCase,
