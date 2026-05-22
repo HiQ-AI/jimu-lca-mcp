@@ -134,6 +134,20 @@ export async function post<T = unknown>(
 }
 
 /**
+ * POST wrapper for endpoints that read their inputs from the **query string**
+ * rather than a JSON body (e.g. `copyCase` — body `{caseId}` yields
+ * "caseId不能为空", `?caseId=…` works).
+ */
+export async function postQuery<T = unknown>(
+  ctx: ToolContext,
+  path: string,
+  query: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
+  const env = await call<T>(ctx, "POST", path, { query });
+  return env.data;
+}
+
+/**
  * POST wrapper that also returns the pagination envelope siblings — needed
  * for endpoints like `getBrandPage` where pagination fields sit at the top
  * level of the response, not nested in `data`.

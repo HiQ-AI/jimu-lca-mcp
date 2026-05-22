@@ -228,11 +228,13 @@ default, not a vow.
 
 ## What we deferred (⏸)
 
-- `get_data_config` — singular drilldown. **Now a known blocker, not just a
-  nice-to-have:** the [workflow walkthrough](workflow-walkthrough.md) found
-  that an agent can't complete the fill→calculate flow without enumerating +
-  binding a background source per data item, which this endpoint feeds.
-  Promote before the companion skill ships.
+- `get_data_config` — singular drilldown into one data item's backings
+  (background datasets, LCI rows, transport, validation messages). Useful for
+  "why is this item not matched?" inspection. Not a calc blocker — the
+  [workflow walkthrough](workflow-walkthrough.md) confirmed template items come
+  with backgrounds pre-bound; the real fill→calculate gotchas were
+  product-output activity data + the validation-snapshot cache, not source
+  binding. Promote when an agent needs to debug an item's backing.
 - `publish_data` — semantics unclear in docs; need a real case
 - `submit_uncertainty_analysis` — async; need polling story
 
