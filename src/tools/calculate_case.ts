@@ -114,10 +114,37 @@ export const calculateCase: ToolDef<typeof Args, unknown> = {
       }
     }
 
-    // 3. Fetch the case meta (unit / declared-unit fields).
+    // 3. Fetch the case meta (unit / declared-unit fields + version).
     const detail = await get<CaseDetail>(ctx, "/lca/v3/getCaseDetail", {
       id: args.case_id,
     });
+
+    // 3b. Guard: method_id MUST belong to THIS case's background version. A
+    //     wrong-version method id is accepted at submit but the async calc then
+    //     silently FAILS ("计算失败") even with clean validation — so reject it
+    //     loudly here, naming the valid methods. (try/catch: don't block calc if
+    //     the method list is briefly unavailable.)
+    const versionId = (detail as Record<string, unknown>).versionId as string | undefined;
+    if (versionId) {
+      try {
+        const methods = await get<Array<{ id: string; name?: string; methodName?: string }>>(
+          ctx,
+          "/lca/v3/getAssignedCalculationMethods",
+          { versionId },
+        );
+        if (methods.length && !methods.some((m) => String(m.id) === String(args.method_id))) {
+          throw new JimuLcaError(
+            "validation",
+            `method_id ${args.method_id} is not a calculation method of this case's version (${versionId}) — ` +
+              `the calc would submit but then silently fail. Use one of: ` +
+              methods.slice(0, 12).map((m) => `${m.id} (${m.name ?? m.methodName})`).join(", "),
+          );
+        }
+      } catch (e) {
+        if (e instanceof JimuLcaError && e.kind === "validation") throw e;
+        // method list unavailable → proceed.
+      }
+    }
 
     // 4. Submit the calc task with the full body.
     const result = await post(ctx, "/lca/v3/addCaseCalculationTask", {

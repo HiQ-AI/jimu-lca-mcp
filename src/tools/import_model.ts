@@ -3,7 +3,6 @@ import type { ToolDef } from "../types.js";
 import { JimuLcaError } from "../types.js";
 import { getMemberToken } from "../api.js";
 import { resolveManagerBaseUrl } from "../env.js";
-import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 
 const Args = z.object({
@@ -28,7 +27,18 @@ export const importModel: ToolDef<typeof Args, unknown> = {
   async handler(args, ctx) {
     const bearer = await getMemberToken(ctx);
     const base = resolveManagerBaseUrl(ctx.baseUrl);
-    const file = await readFile(args.file_path);
+    // CLI-only: reads a local .xlsx. node:fs isn't available on the Cloudflare
+    // Worker, so import dynamically and fail with a clear message there.
+    let fs: typeof import("node:fs/promises");
+    try {
+      fs = await import("node:fs/promises");
+    } catch {
+      throw new JimuLcaError(
+        "transport",
+        "import_model reads a local file and runs only via the CLI / stdio MCP, not the HTTP Worker.",
+      );
+    }
+    const file = await fs.readFile(args.file_path);
     const form = new FormData();
     form.append("caseId", args.case_id);
     const blob = new Blob([file], {

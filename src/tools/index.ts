@@ -12,6 +12,8 @@ import type { ToolDef } from "../types.js";
 import { getUnits } from "./get_units.js";
 import { listBackgroundDbVersions } from "./list_background_db_versions.js";
 import { listCalculationMethods } from "./list_calculation_methods.js";
+import { checkConnectivity } from "./check_connectivity.js";
+import { getCalcStatus } from "./get_calc_status.js";
 
 // Space management
 import { listSpaces } from "./list_spaces.js";
@@ -56,6 +58,7 @@ import { getTopContributors } from "./get_top_contributors.js";
 export const allTools: ToolDef[] = [
   // Foundation reads
   getUnits,
+  checkConnectivity,
   listBackgroundDbVersions,
   listCalculationMethods,
   listSpaces,
@@ -89,6 +92,7 @@ export const allTools: ToolDef[] = [
   calculateCase,
 
   // Result reads
+  getCalcStatus,
   listCaseCalculationMethods,
   getLciaDetail,
   getSensitivity,

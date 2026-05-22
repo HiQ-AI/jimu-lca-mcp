@@ -178,6 +178,12 @@ interface CachedToken {
   bearer: string;
   expMs: number;
 }
+// Module-level cache. On a Cloudflare Worker this is per-isolate and reused
+// across requests in the same isolate; it is keyed by memberKey, so it is safe
+// ONLY under the invariant that one memberKey maps to exactly one user/tenant
+// (true today: each connector config carries one user's memberKey). If a
+// memberKey ever spans multiple users, this becomes a cross-user token leak —
+// re-key by a per-request identity instead.
 const _tokenCache = new Map<string, CachedToken>();
 
 /** Mint (and cache) a Bearer JWT from the memberKey via the open API's
@@ -210,6 +216,17 @@ export async function getMemberToken(ctx: ToolContext): Promise<string> {
   }
   _tokenCache.set(ctx.memberKey, { bearer, expMs });
   return bearer;
+}
+
+/** Decode the current user's uuid from the minted JWT (user_info.uuid). Used for
+ *  the message-inbox calc-status feed, which is keyed by user uuid. */
+export async function getUserUuid(ctx: ToolContext): Promise<string> {
+  const bearer = await getMemberToken(ctx);
+  const token = bearer.replace(/^Bearer\s+/, "");
+  const payload = JSON.parse(Buffer.from(token.split(".")[1]!, "base64").toString());
+  const uuid = payload?.user_info?.uuid;
+  if (!uuid) throw new JimuLcaError("auth", "could not decode user uuid from member token");
+  return uuid;
 }
 
 /** POST to the internal manager API with a minted Bearer JWT. Used for custom

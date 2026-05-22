@@ -44,6 +44,7 @@ export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
     const materialList: unknown[] = [];
     const transportList: unknown[] = [];
 
+    const prepared: string[] = [];
     for (const b of args.bindings) {
       const dd = await callManager<DataDetail>(ctx, "/managerPro/dataConfiguration/getDataDetail", {
         caseId: args.case_id,
@@ -52,8 +53,14 @@ export const matchBackgrounds: ToolDef<typeof Args, unknown> = {
       });
       const bg0 = (dd.backgroundList ?? [])[0];
       if (!bg0) {
-        throw new Error(`no background slot for element ${b.element_id} (not a matchable input?)`);
+        throw new Error(
+          `no background slot for element ${b.element_id} (not a matchable input?). ` +
+            `Nothing was saved. Prepared before failure: [${prepared.join(", ") || "none"}]; ` +
+            `not yet processed: [${args.bindings.slice(args.bindings.indexOf(b)).map((x) => x.element_id).join(", ")}]. ` +
+            `Fix or drop that binding and call again.`,
+        );
       }
+      prepared.push(b.element_id);
       backgroundList.push({
         ...bg0,
         upElementUuid: b.background_uuid,
