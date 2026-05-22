@@ -41,6 +41,40 @@ appkey that Group 1 needs), and creates a **private** space by default. That
 makes it a legitimate agent action, not tenant governance. Member/role writes
 above stay excluded — those touch *other people's* access.
 
+## Group 5 — Custom products / no-template modeling (future support — prod not ready)
+
+Creating a **自定义产品** (custom product with no model template, then building
+its stage/process/data-item structure) is **not** possible through the open
+platform API today. Verified by testing: `addBrand` (`/lca/v3/addBrand`) hard-
+requires a real catalog `modelId` — `modelId` of `0`/`-1` → code 30049
+("数据不存在"), empty/missing → 30084 ("必要参数不能为空"). There is no
+open-API endpoint to create a custom product or add stages/processes.
+
+The web UI does it via a **separate internal API**, not the open platform:
+
+```
+POST https://cloud.ecdigit.com/ecdigit/api/managerPro/brand/addBrandData
+Auth: Authorization: Bearer <JWT>      # NOT the appId/memberKey header
+Body: { "groupId", "spaceId", "name", "industryId", "categoryId" }   # no modelId
+```
+
+- It's a **different host + auth scheme** (`cloud.ecdigit.com/.../managerPro/*`
+  with a web-session Bearer JWT) than the open API (`open.ecdigit.com/openapi/*`
+  with `appId: <memberKey>`).
+- A Bearer JWT *can* be minted from the memberKey via `/open/memberToken/get`,
+  so a programmatic path is conceivable — but per the platform team the
+  custom-product internal endpoints are **dev-only; not yet released to
+  production**. The created shell also starts with **0 cases** (structure is
+  built in a second step), so full no-template support needs the
+  structure-building internal endpoints too, not just `addBrandData`.
+
+**When prod ships these:** wrap as `create_custom_product(name, space_id,
+group_id, industry_id, category_id)` + structure-building tools, minting the
+Bearer JWT from the memberKey internally. Until then the skill's no-template
+path is a web-UI hand-off (see the companion skill's `modeling.md`), and the
+agent should lead with template search (`list_models`, BM25-ranked) — the
+catalog is large (500+) and covers far more than it first appears.
+
 ## Group 3 — Endpoints with unclear semantics until v1
 
 These will be revisited after we hit a real user task that needs them:
