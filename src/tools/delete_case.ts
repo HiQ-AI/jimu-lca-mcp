@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDef } from "../types.js";
-import { get, post } from "../api.js";
+import { get, postQuery } from "../api.js";
 
 const Args = z.object({
   case_id: z.string().describe("Case id to delete."),
@@ -48,8 +48,9 @@ export const deleteCase: ToolDef<typeof Args, unknown> = {
         note: "Preview only — confirm with the user, then call again with confirm:true to delete.",
       };
     }
-    // Quirk: parameter name on the wire is `id`, not `caseId`.
-    const result = await post(ctx, "/lca/v3/deleteCase", { id: args.case_id });
+    // Quirk: deleteCase reads `id` from the QUERY string, not the body (a body
+    // {id} returns "id不能为空") — same query-param quirk as copyCase.
+    const result = await postQuery(ctx, "/lca/v3/deleteCase", { id: args.case_id });
     return { deleted: true, deleted_case: preview, result };
   },
   cli: { summary: "Delete an LCA case (preview unless --confirm; destructive)." },

@@ -3,7 +3,7 @@ import type { ToolDef } from "../types.js";
 import { callManager } from "../api.js";
 
 const Binding = z.object({
-  element_id: z.string().describe("Data-item elementId to bind (list_data_items / get_case_overview)."),
+  element_id: z.string().describe("The data item's `elementId` field (from list_data_items / get_model_items) — NOT its row `id`. Passing the row id fails."),
   background_uuid: z.string().describe("search_background_data.bind_uuid (the dataset's standardUuid). MUST be bind_uuid, NOT dataset_uuid — the platform binds by standardUuid."),
   background_data_id: z.string().describe("Chosen dataset id (search_background_data.background_data_id) — REQUIRED: the platform resolves the LCI by this id."),
   background_name: z.string().describe("Chosen dataset CN name (search_background_data.name_cn)."),

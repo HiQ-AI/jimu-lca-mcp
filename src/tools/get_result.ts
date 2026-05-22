@@ -64,7 +64,7 @@ export const getResult: ToolDef<typeof Args, unknown> = {
         `audited LCA; not for regulatory/compliance submission without expert review. ` +
         `Report the value as an order-of-magnitude / range, not false precision.`,
       note: gwp == null
-        ? "No result yet — check get_calc_status; if done, the headline co2Content may still be propagating."
+        ? "co2Content not populated — check get_calc_status; if done, read the GWP via get_product_lcia(brand_id) (co2Content can lag the LCIA result). The provenance + disclaimer above still apply."
         : "Present GWP with the disclaimer + the primary-vs-default split; surface assumptions the user should replace with real data.",
     };
   },
