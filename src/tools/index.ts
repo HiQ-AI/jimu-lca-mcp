@@ -29,6 +29,7 @@ import { addCaseProcess } from "./add_case_process.js";
 import { addDataItems } from "./add_data_items.js";
 import { validateCase } from "./validate_case.js";
 import { searchBackgroundData } from "./search_background_data.js";
+import { matchBackground } from "./match_background.js";
 import { importModel } from "./import_model.js";
 import { listProducts } from "./list_products.js";
 import { getProduct } from "./get_product.js";
@@ -80,6 +81,7 @@ export const allTools: ToolDef[] = [
   addCaseProcess,
   addDataItems,
   searchBackgroundData,
+  matchBackground,
   importModel,
   validateCase,
   copyCase,
