@@ -130,16 +130,25 @@ export const calculateCase: ToolDef<typeof Args, unknown> = {
       consultProductCoefficient: detail.consultProductCoefficient,
     });
 
-    const chainWarnings = (validation?.warnings ?? []).filter((w) => w.includes("活动数据为0"));
+    // Warnings that empirically cause the async calc to finish with NO result.
+    const RESULT_BREAKERS = ["活动数据为0", "单位组不一致"]; // broken chain; defective bg-dataset binding
+    const breakers = (validation?.warnings ?? []).filter((w) =>
+      RESULT_BREAKERS.some((p) => w.includes(p)),
+    );
     return {
       submitted: result,
       validation_score: validation?.score ?? null,
       warning_count: validation?.warnings.length ?? null,
       warnings: validation?.warnings ?? [],
+      result_breaker_warnings: breakers,
       note:
-        chainWarnings.length > 0
-          ? `Submitted, BUT ${chainWarnings.length} 确认项 flag 活动数据为0 (likely a broken inter-process flow chain). The calc may finish with NO result — verify via get_product_lcia; if empty, fill those downstream items to connect the chain, then copy_case + recalculate.`
-          : "Submitted. Poll get_product_lcia / list_products.co2Content for the result (async, up to ~5 min). status:已计算 alone is not a result.",
+        breakers.length > 0
+          ? `Submitted, BUT ${breakers.length} 确认项 are known result-breakers — the calc may finish with NO result. ` +
+            `活动数据为0 = broken inter-process flow chain (fill those downstream items, copy_case, recalc). ` +
+            `背景数据单位组不一致 = a defective background-dataset binding (often an Ecoinvent 3.10 template) — ` +
+            `re-create the product on a newer version (e.g. Ecoinvent 3.12+HiQ) and refill. Verify via get_product_lcia.`
+          : "Submitted. Poll get_product_lcia / list_products.co2Content (async, ~up to 5 min). " +
+            "Then run get_top_contributors — if a major input shows ~0% contribution, its branch is orphaned/unbound (result understated).",
     };
   },
   cli: {
