@@ -68,12 +68,25 @@ Body: { "groupId", "spaceId", "name", "industryId", "categoryId" }   # no modelI
   built in a second step), so full no-template support needs the
   structure-building internal endpoints too, not just `addBrandData`.
 
-**When prod ships these:** wrap as `create_custom_product(name, space_id,
-group_id, industry_id, category_id)` + structure-building tools, minting the
-Bearer JWT from the memberKey internally. Until then the skill's no-template
-path is a web-UI hand-off (see the companion skill's `modeling.md`), and the
-agent should lead with template search (`list_models`, BM25-ranked) — the
-catalog is large (500+) and covers far more than it first appears.
+**Editing an existing case's structure is the same situation.** Verified by
+enumerating all 32 LCA open-API endpoints: there is **no** add/remove
+stage / process / data-item endpoint. `editElements` only edits the *values*
+of the template's existing rows; `importModelData` only bulk-edits values from
+the exported Excel (it does not add structure); `copyCase`/`deleteCase` operate
+on whole cases. So after `create_product` instantiates a template, the agent
+can change **values** but not **structure** via the open API. Adding/removing a
+stage/process/data-item to tailor a template to a real product is a web-UI /
+internal-API action today.
+
+**When prod ships these:** wrap `create_custom_product(...)` + structure tools
+(add/remove stage/process/data-item), minting the Bearer JWT from the memberKey
+internally. Until then:
+- **Value adaptation** of a template → fully API (editElements), works now.
+- **Structure adaptation** (template doesn't match the real product) →
+  web-UI-guided hand-off (agent co-designs the changes, user applies them in
+  the web UI, agent resumes via API).
+- Lead with template search (`list_models`, BM25-ranked) — the catalog is large
+  (500+) and a close-enough template usually exists, needing only value edits.
 
 ## Group 3 — Endpoints with unclear semantics until v1
 
