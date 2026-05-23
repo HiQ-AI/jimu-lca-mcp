@@ -11,11 +11,14 @@
     "jimu-lca": "./dist/cli.js"
   },
   "exports": {
+    ".": "./dist/server.js",
+    "./server": "./dist/server.js",
     "./tools": {
       "import": "./dist/tools/index.js",
       "types": "./dist/tools/index.d.ts"
     },
-    "./manifest": "./src/connector/manifest.json"
+    "./manifest": "./src/connector/manifest.json",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
