@@ -4,95 +4,111 @@ import { callManager } from "../api.js";
 
 const Args = z.object({
   version_id: z.string().describe("Background-DB version id (list_background_db_versions). Prefer the latest Ecoinvent 3.12+HiQ."),
-  element_names: z.array(z.string()).min(1).describe("Material/flow names to search, e.g. ['聚丙烯','中压电力','玻璃']. One batched call instead of N search_background_data calls."),
+  element_names: z.array(z.string()).min(1).describe("Material/flow names to search — English OR Chinese, e.g. ['transport, freight, lorry, >32 metric ton','聚丙烯','medium voltage electricity']. One batched call instead of N searches."),
   size: z.number().default(15).describe("Max candidates per name."),
 });
 
+type Ctx = Parameters<ToolDef<typeof Args, unknown>["handler"]>[1];
+
+// queryBackgroundData row (Chinese-name prefix search; carries standardUuid).
 interface BgRow {
-  id: string;
-  uuid: string;
-  standardUuid: string;
-  name: string;
-  nameCn: string;
-  locationName: string;
-  co2Content: string;
-  unitName: string;
-  unitGroup: string;
+  id: string; uuid: string; standardUuid: string;
+  name: string; nameCn: string; locationName: string;
+  co2Content: string; unitName: string; unitGroup: string;
+}
+// lcaUpPageList row (English-name search; carries processUuid === standardUuid === bind_uuid).
+interface UpRow {
+  id: string; uuid: string; processUuid: string;
+  name: string; nameCn: string; locationName: string;
+  co2Content: string; unitName: string; unitGroup: string;
 }
 
-/** Map one queryBackgroundData row to the bind-ready candidate shape. bind_uuid
- *  is the dataset's standardUuid (what the platform binds by), NOT its own uuid. */
-function toCandidate(r: BgRow) {
-  return {
-    bind_uuid: r.standardUuid,
-    background_data_id: r.id,
-    dataset_uuid: r.uuid,
-    name_cn: r.nameCn,
-    name_en: r.name,
-    location: r.locationName,
-    unit: r.unitName,
-    unit_group: r.unitGroup,
-    co2_per_unit: r.co2Content,
-  };
+interface Candidate {
+  bind_uuid: string; background_data_id: string; dataset_uuid: string;
+  name_cn: string; name_en: string; location: string;
+  unit: string; unit_group: string; co2_per_unit: string;
 }
+const fromBg = (r: BgRow): Candidate => ({
+  bind_uuid: r.standardUuid, background_data_id: r.id, dataset_uuid: r.uuid,
+  name_cn: r.nameCn, name_en: r.name, location: r.locationName,
+  unit: r.unitName, unit_group: r.unitGroup, co2_per_unit: r.co2Content,
+});
+// bind_uuid is the processUuid — verified equal to queryBackgroundData's standardUuid.
+const fromUp = (r: UpRow): Candidate => ({
+  bind_uuid: r.processUuid, background_data_id: r.id, dataset_uuid: r.uuid,
+  name_cn: r.nameCn, name_en: r.name, location: r.locationName,
+  unit: r.unitName, unit_group: r.unitGroup, co2_per_unit: r.co2Content,
+});
 
-async function queryRaw(ctx: Parameters<ToolDef<typeof Args, unknown>["handler"]>[1], versionId: string, elementName: string, size: number): Promise<BgRow[]> {
-  const rows = await callManager<BgRow[]>(ctx, "/managerPro/lcaAdminFeign/queryBackgroundData", {
-    versionId, elementName, keyword: "", flowUuid: "", allocationMethod: "",
-    locationId: "", status: 0, unit: "", uuid: "", type: "0", page: 1, size,
+const tokens = (s: string): string[] => s.split(/[，,、\s]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+
+/** English-name search via lcaUpPageList — its `keyword` matches the English name and
+ *  covers datasets with no Chinese index (e.g. freight transport). */
+async function searchEn(ctx: Ctx, versionId: string, keyword: string, size: number): Promise<UpRow[]> {
+  const rows = await callManager<UpRow[]>(ctx, "/managerPro/dataConfiguration/lcaUpPageList", {
+    versionId, keyword, flowUuid: "", allocationMethod: "", locationId: "",
+    status: 0, unit: "", uuid: "", page: 1, size: Math.max(size, 30),
   });
   return rows ?? [];
 }
 
-const tokens = (s: string): string[] => s.split(/[，,、\s]+/).map((t) => t.trim()).filter(Boolean);
-
-/**
- * jimu's elementName match is a LEFT-PREFIX match on the Chinese name, not a
- * contains/fuzzy. So "聚乙烯，高密度，颗粒" returns nothing because the real dataset is
- * "聚乙烯生产，高密度，颗粒" (the inserted 生产 breaks the prefix), yet querying the head
- * noun "聚乙烯" returns it. We therefore query the full term, and on a miss progressively
- * drop trailing comma-segments down to the head noun, then rank the candidates by how
- * many of the requested name's tokens appear in each candidate's Chinese name.
- */
-async function smartSearch(ctx: Parameters<ToolDef<typeof Args, unknown>["handler"]>[1], versionId: string, name: string, size: number): Promise<BgRow[]> {
+/** Chinese-name search via queryBackgroundData. jimu matches elementName as a LEFT-PREFIX
+ *  of the Chinese name, so "聚乙烯，高密度，颗粒" misses (real name "聚乙烯生产，高密度，颗粒");
+ *  we drop trailing comma-segments to the head noun, then rank by qualifier match. */
+async function searchZh(ctx: Ctx, versionId: string, name: string, size: number): Promise<BgRow[]> {
   const segs = name.split(/[，,]/).map((s) => s.trim()).filter(Boolean);
-  const attempts: string[] = [];
-  for (let i = segs.length; i >= 1; i--) attempts.push(segs.slice(0, i).join("，"));
-  if (!attempts.includes(name)) attempts.unshift(name);
-
+  const attempts = [name, ...Array.from({ length: segs.length }, (_, i) => segs.slice(0, segs.length - i).join("，"))];
   let rows: BgRow[] = [];
   for (const q of [...new Set(attempts)]) {
-    rows = await queryRaw(ctx, versionId, q, Math.max(size, 30));
-    if (rows.length) break;
+    rows = await callManager<BgRow[]>(ctx, "/managerPro/lcaAdminFeign/queryBackgroundData", {
+      versionId, elementName: q, keyword: "", flowUuid: "", allocationMethod: "",
+      locationId: "", status: 0, unit: "", uuid: "", type: "0", page: 1, size: Math.max(size, 30),
+    });
+    if ((rows ?? []).length) break;
   }
+  return rows ?? [];
+}
+
+/** Rank candidates by how many of the query's tokens appear in the EN or CN name. */
+function rank(cands: Candidate[], name: string, size: number): Candidate[] {
   const want = tokens(name);
-  return rows
-    .map((r) => ({ r, score: want.filter((t) => (r.nameCn || "").includes(t)).length }))
+  return cands
+    .map((c) => ({ c, score: want.filter((t) => (c.name_en || "").toLowerCase().includes(t) || (c.name_cn || "").includes(t)).length }))
     .sort((a, b) => b.score - a.score)
     .slice(0, size)
-    .map((x) => x.r);
+    .map((x) => x.c);
 }
 
 export const searchBackgrounds: ToolDef<typeof Args, unknown> = {
   name: "search_backgrounds",
   description:
-    "Batch search of the background LCI database for several material/flow names in " +
-    "ONE call. Handles jimu's left-prefix Chinese-name matching for you: it queries " +
-    "the head noun and ranks candidates by qualifier match, so a natural name like " +
-    "'聚乙烯，高密度，颗粒' still finds '聚乙烯生产，高密度，颗粒'. Returns, per name, candidates " +
-    "with `bind_uuid` (standardUuid) + `background_data_id` (both needed to bind via " +
-    "match_backgrounds), CN/EN name, region, unit, unit_group, per-unit co2. Bind by " +
-    "`bind_uuid` (NOT dataset_uuid). NOTE: datasets with no Chinese name (e.g. freight " +
-    "transport) are not searchable here — an empty result means 'mark unbound', not 'retry'.",
+    "Search the background LCI database for several material/flow names in ONE call. " +
+    "Works with ENGLISH or Chinese names: it searches the English name via lcaUpPageList " +
+    "(which covers datasets that have no Chinese index — e.g. freight transport — and is " +
+    "usually the precise path; English names come straight from a report or the catalog), " +
+    "and falls back to the Chinese-name search for Chinese terms. Returns, per name, ranked " +
+    "candidates with `bind_uuid` + `background_data_id` (both needed by match_backgrounds), " +
+    "CN/EN name, region, unit, unit_group, per-unit co2. Pick by region + unit, then bind by " +
+    "`bind_uuid`. Tip: prefer the dataset's EN name (e.g. 'market for transport, freight, lorry, " +
+    ">32 metric ton') for the most precise hit.",
   inputSchema: Args,
   annotations: { readOnlyHint: true },
   async handler(args, ctx) {
-    const out: Record<string, ReturnType<typeof toCandidate>[]> = {};
+    const out: Record<string, Candidate[]> = {};
     for (const name of args.element_names) {
-      const rows = await smartSearch(ctx, args.version_id, name, args.size);
-      out[name] = rows.map(toCandidate);
+      const hasCjk = /[一-鿿]/.test(name);
+      // English (lcaUpPageList) is primary; Chinese search is the fallback (or primary for CJK).
+      let cands: Candidate[] = [];
+      if (!hasCjk) {
+        cands = (await searchEn(ctx, args.version_id, name, args.size)).map(fromUp);
+        if (!cands.length) cands = (await searchZh(ctx, args.version_id, name, args.size)).map(fromBg);
+      } else {
+        cands = (await searchZh(ctx, args.version_id, name, args.size)).map(fromBg);
+        if (!cands.length) cands = (await searchEn(ctx, args.version_id, name, args.size)).map(fromUp);
+      }
+      out[name] = rank(cands, name, args.size);
     }
     return out;
   },
-  cli: { summary: "Batch-search background datasets (handles prefix-match + ranks)." },
+  cli: { summary: "Batch-search background datasets (EN via lcaUpPageList + ZH fallback, ranked)." },
 };
