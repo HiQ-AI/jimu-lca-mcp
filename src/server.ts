@@ -12,16 +12,21 @@ import { z } from "zod";
 
 import { allTools } from "./tools/index.js";
 import { contextFromEnv } from "./auth.js";
+import { openLocalBridge } from "./sqliteBridge.js";
 import { stderrLogger } from "./logger.js";
 import { JimuLcaError } from "./types.js";
 import { VERSION } from "./env.js";
 
 async function main(): Promise<void> {
   const ctx = await contextFromEnv(stderrLogger);
+  // stdio has no D1 — back the catalog→jimu binding bridge with the local
+  // SQLite so bind_backgrounds_local works (undefined when no DB is present).
+  ctx.bridge = openLocalBridge(stderrLogger);
   stderrLogger.info("jimu-lca-mcp starting", {
     version: VERSION,
     baseUrl: ctx.baseUrl,
     toolCount: allTools.length,
+    bridge: ctx.bridge ? "local-sqlite" : "unavailable",
   });
 
   const server = new McpServer({
