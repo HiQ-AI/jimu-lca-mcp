@@ -1,6 +1,6 @@
 {
   "name": "jimu-lca-mcp",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "description": "MCP server + CLI for 易碳云开放平台 积木LCA 3.0 — product carbon footprint workspace.",
   "type": "module",
   "engines": {
