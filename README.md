@@ -89,20 +89,36 @@ operations are marked `destructiveHint` so a host can gate them. The full
 endpoint → tool mapping, with status flags, is in
 [docs/architecture/tools.md](docs/architecture/tools.md).
 
-### Background matching and the local bridge
+### Background matching, and the optional local bridge
 
-Binding a flow to a background LCI dataset normally means a fuzzy name search
-(`search_backgrounds`) followed by a save (`bind_backgrounds`). Hosts that ship a
-local copy of the LCI catalogs can skip the search: pass the dataset's
-`dataset_key` to `bind_backgrounds_local`, which resolves it to 积木's binding ids
-through a **version bridge** and saves in one call — faster and exact. Datasets
-the bridge doesn't cover come back as `unresolved`, and the caller falls back to
-the search path.
+Binding a flow to a background LCI dataset normally means a fuzzy **name search**
+(`search_backgrounds`) followed by a save (`bind_backgrounds`). This is the
+default path and **works for everyone — no extra data needed.**
 
-The bridge is a ~170 MB SQLite table, too big to bundle and refreshed on the
-dataset's own cadence. The Worker backs it with Cloudflare D1; local hosts
-provision a `.db` file (Cortex Desktop downloads it once from this repo's GitHub
-Release). See [docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
+Why search by name at all? Because 积木 **re-IDs every dataset when it imports a
+background database**: a dataset's 积木-internal uuid is assigned at import and is
+*not* the standardized source uuid. Even for Ecoinvent, 积木's uuid is not the
+official Ecoinvent uuid — and HiQLCD and other libraries are the same. So a host
+that holds the standardized catalogs locally can't name a 积木 dataset by its
+catalog uuid directly; the two id spaces are disjoint, which is why the universal
+path falls back to matching by name.
+
+The **local bridge** is an optional accelerator for the one case where that gap
+can be closed: 积木's per-version mapping export preserves each dataset's original
+pre-import uuid, which *does* equal the standardized catalog uuid. Precomputing
+that into a lookup table (catalog uuid + version + system model → 积木's binding
+ids) lets a host that ships the standardized catalogs — in practice **HiQ Cortex
+Desktop** — skip the search and call `bind_backgrounds_local` for an exact,
+one-shot bind. Anything the bridge doesn't cover comes back `unresolved` and
+falls back to the search path.
+
+**Most users never touch the bridge** — remote/HTTP hosts, the CLI, and any host
+without the local catalogs all use `search_backgrounds` + `bind_backgrounds`. The
+bridge is a ~170 MB SQLite table (`bridge.db`), too big to bundle and refreshed on
+the dataset's own cadence: the Worker backs it with Cloudflare D1, and local
+catalog-shipping hosts download a gzipped copy (`bridge.db.gz`, ~55 MB) once from
+this repo's GitHub Release. See
+[docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
 
 ### File input across transports
 

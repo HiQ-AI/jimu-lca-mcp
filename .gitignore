@@ -23,10 +23,14 @@ secrets/
 # Test scaffolding stays local — never publish (fixtures may carry customer data)
 tests/
 
-# Binding-bridge artifacts — the 积木 mapping exports and the generated D1 dump
-# are operator inputs/outputs, loaded into D1 out of band (docs/architecture/local-bridge.md)
+# Binding-bridge artifacts — the 积木 mapping exports, the generated D1 dump, and
+# the built SQLite db (+ its gzip) are operator inputs/outputs. They are loaded
+# into D1 / attached to a GitHub Release out of band, never committed
+# (docs/architecture/local-bridge.md).
 *.xlsx
 bridge.sql
+bridge.db
+bridge.db.gz
 
 # Local CLI/session state (carries working space + case ids)
 jimu-lca-session.json

@@ -17,8 +17,12 @@ that powers it is built.
 积木 re-identifies every dataset when a background database is imported into a
 version. A dataset's 积木-internal `uuid`, its `standardUuid`, and its numeric
 `backgroundDataId` are all assigned at import time and share nothing with the
-identifiers in the source catalog. So a local catalog row cannot name a 积木
-dataset directly — the two id spaces are disjoint.
+identifiers in the source catalog. The 积木 ids are **not** the standardized
+upstream ids: 积木's Ecoinvent uuid is not the official Ecoinvent uuid, and the
+same holds for HiQLCD and every other library it imports. So a local catalog row
+cannot name a 积木 dataset directly — the two id spaces are disjoint, which is why
+the universal bind path has to match by **name** (`search_backgrounds`) rather
+than by id.
 
 What *does* survive the import is the dataset's **original pre-import uuid**. 积木's
 per-version mapping export (背景数据映射管理) records it in the
