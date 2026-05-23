@@ -33,6 +33,20 @@ currently exists to:
 Coding begins after the docs settle and the open questions in
 `docs/architecture/non-goals.md` are closed.
 
+## Deploy (READ — don't guess)
+
+**Push to `main` → Cloudflare Workers Builds auto-builds and deploys.** That is the
+whole deploy path. No manual step, no `wrangler deploy`, no `CLOUDFLARE_API_TOKEN`
+needed for the normal flow — just commit to `main` and the Worker at
+`https://jimu-lca-mcp.hiq.earth/mcp` updates in a couple minutes.
+
+- Manual deploy (`npm run worker:deploy`) requires a `CLOUDFLARE_API_TOKEN` and is
+  only a fallback; the CI/CF auto-build is the source of truth.
+- The **desktop app connects to this HTTP Worker**, not a local stdio MCP. So the
+  Worker **cannot read local files** — any tool that takes a local `file_path`
+  (e.g. `import_model`) does NOT work from the desktop. File input must arrive over
+  the wire (content/structured args), not a path. (See wrangler.toml.)
+
 ## Architecture (TL;DR)
 
 - **Local stdio MCP**, spawned by the agent host as a child process. **No** K3s
