@@ -11,7 +11,7 @@
  */
 
 import type { ToolContext } from "./types.js";
-import { callManager } from "./api.js";
+import { callManager, getMemberToken } from "./api.js";
 
 /** A dataset already resolved to the ids saveConfiguration needs. */
 export interface ResolvedBinding {
@@ -36,9 +36,9 @@ interface DataDetail {
 /**
  * Bind the given datasets to their flows in one stage. Loads each item's
  * data-config, sets the chosen dataset on its first background slot, and saves
- * all in a single saveConfiguration (manager API). If an element has no
+ * all in a single saveConfiguration (manager API). If any element has no
  * background slot (not a matchable input) nothing is saved and the error names
- * which bindings were prepared and which remain, so the caller can fix and retry.
+ * every such element, so the caller can drop them and retry.
  */
 export async function saveStageBindings(
   ctx: ToolContext,
@@ -46,28 +46,33 @@ export async function saveStageBindings(
   stageId: string,
   bindings: ResolvedBinding[],
 ): Promise<unknown> {
+  // The per-item data-config reads are independent and dominate wall time, so
+  // fetch them in parallel rather than N sequential round trips. Warm the token
+  // cache first so the parallel calls reuse one mint instead of racing to mint N.
+  await getMemberToken(ctx);
+  const details = await Promise.all(
+    bindings.map((b) =>
+      callManager<DataDetail>(ctx, "/managerPro/dataConfiguration/getDataDetail", {
+        caseId,
+        stageId,
+        elementId: b.element_id,
+      }),
+    ),
+  );
+
   const backgroundList: Array<Record<string, unknown>> = [];
   const slciList: unknown[] = [];
   const materialList: unknown[] = [];
   const transportList: unknown[] = [];
+  const noSlot: string[] = [];
 
-  const prepared: string[] = [];
-  for (const b of bindings) {
-    const dd = await callManager<DataDetail>(ctx, "/managerPro/dataConfiguration/getDataDetail", {
-      caseId,
-      stageId,
-      elementId: b.element_id,
-    });
+  bindings.forEach((b, i) => {
+    const dd = details[i]!;
     const bg0 = (dd.backgroundList ?? [])[0];
     if (!bg0) {
-      throw new Error(
-        `no background slot for element ${b.element_id} (not a matchable input?). ` +
-          `Nothing was saved. Prepared before failure: [${prepared.join(", ") || "none"}]; ` +
-          `not yet processed: [${bindings.slice(bindings.indexOf(b)).map((x) => x.element_id).join(", ")}]. ` +
-          `Fix or drop that binding and call again.`,
-      );
+      noSlot.push(b.element_id);
+      return;
     }
-    prepared.push(b.element_id);
     backgroundList.push({
       ...bg0,
       upElementUuid: b.background_uuid,
@@ -84,6 +89,13 @@ export async function saveStageBindings(
     slciList.push(...(dd.slciList ?? []));
     materialList.push(...(dd.materialList ?? []));
     transportList.push(...(dd.transportList ?? []));
+  });
+
+  if (noSlot.length) {
+    throw new Error(
+      `no background slot for element(s) [${noSlot.join(", ")}] (not matchable inputs?). ` +
+        `Nothing was saved — drop them and call again.`,
+    );
   }
 
   return await callManager(ctx, "/managerPro/dataConfiguration/saveConfiguration", {
