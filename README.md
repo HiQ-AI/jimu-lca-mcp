@@ -33,19 +33,25 @@ currently exists to:
 Coding begins after the docs settle and the open questions in
 `docs/architecture/non-goals.md` are closed.
 
-## Deploy (READ — don't guess)
+## Deployment
 
-**Push to `main` → Cloudflare Workers Builds auto-builds and deploys.** That is the
-whole deploy path. No manual step, no `wrangler deploy`, no `CLOUDFLARE_API_TOKEN`
-needed for the normal flow — just commit to `main` and the Worker at
-`https://jimu-lca-mcp.hiq.earth/mcp` updates in a couple minutes.
+The HTTP Worker is deployed by **Cloudflare Workers Builds**, which builds and
+publishes automatically on every push to `main`. The canonical endpoint is
+`https://jimu-lca-mcp.hiq.earth/mcp`, and changes go live within a few minutes of a
+merge. A manual deploy is available as a fallback:
 
-- Manual deploy (`npm run worker:deploy`) requires a `CLOUDFLARE_API_TOKEN` and is
-  only a fallback; the CI/CF auto-build is the source of truth.
-- The **desktop app connects to this HTTP Worker**, not a local stdio MCP. So the
-  Worker **cannot read local files** — any tool that takes a local `file_path`
-  (e.g. `import_model`) does NOT work from the desktop. File input must arrive over
-  the wire (content/structured args), not a path. (See wrangler.toml.)
+```bash
+npm run worker:deploy   # wrangler deploy; requires CLOUDFLARE_API_TOKEN
+```
+
+### Transports and file input
+
+The same tool surface is served three ways — a stdio MCP server, a CLI, and the
+Cloudflare Worker (HTTP). The Worker runs without a local filesystem, so tools that
+take a file accept its **content over the wire** (base64) in addition to a local
+`file_path`; the path form is resolved only by the CLI and stdio MCP, which run on a
+host with disk access. Tools degrade gracefully and report which input form a given
+transport supports. See [`docs/architecture/file-input.md`](docs/architecture/file-input.md).
 
 ## Architecture (TL;DR)
 
