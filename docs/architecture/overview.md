@@ -5,7 +5,7 @@
 | Surface | Repo / skill | Role |
 |---|---|---|
 | `editor.hiqlcd.com` (jimu_dataset) | `editor-mcp-server` + `cortex-skills/hiq-editor` | **Authors** background LCI datasets (the data library other LCAs consume) |
-| `cloud.ecdigit.com/jimulca` (积木LCA 3.0) | **this repo** + `cortex-skills/jimu-lca-product-carbon` | **Consumes** background datasets to compute product carbon footprints |
+| `cloud.ecdigit.com/jimulca` (积木LCA 3.0) | **this repo** + `cortex-skills/jimu-lca` | **Consumes** background datasets to compute product carbon footprints |
 | (raw report → UPR) | `cortex-skills/upr-integrated-flow` | Extracts production data from EIA reports / PDFs into a UPR Excel |
 
 The three are complementary; an LCA practitioner moves data across all three.
@@ -76,17 +76,31 @@ The memberKey is **long-lived** (no expiry observed; Bearer-JWT tokens derived
 from it have ~30-day expiry, but those are only needed for SaaS-UI redirects,
 which Cortex doesn't do from the agent).
 
-## Deployment shape — local stdio, not remote HTTP
+## Deployment shape — stdio first, plus a stateless HTTP Worker
 
-The choice is **local stdio MCP** (child process spawned by the host as a
-standard MCP server, per the
-[MCP specification](https://modelcontextprotocol.io/)). The alternative — a
-remote HTTP MCP behind a gateway (the pattern `editor-mcp-server` uses for
-HiQ's internal SSO domain) — was considered and rejected for v0.
+Two real deployment shapes ship today:
 
-### Side-by-side
+- **Local stdio MCP** (child process spawned by the host per the
+  [MCP specification](https://modelcontextprotocol.io/)) — the default for local
+  agent hosts and the Cortex Desktop integration.
+- **Cloudflare Worker (HTTP)** — a *stateless* Streamable-HTTP endpoint at
+  `https://jimu-lca-mcp.hiq.earth/mcp` for remote hosts that can't (or don't want
+  to) spawn a local process. The client supplies the memberKey per request
+  (`Authorization: Bearer app:…` or `X-Member-Key`); the Worker keeps no session
+  state and no per-user mapping.
 
-| Dimension | Local stdio (chosen) | Remote HTTP + gateway (rejected for v0) |
+What is **not** built is a remote HTTP MCP behind a gateway that maps an upstream
+agent's SSO identity to a memberKey server-side — that needs infra with no payoff
+here (see below). The Worker sidesteps it by having the client hold the key, the
+same way the stdio host does.
+
+### Why stdio is the default local transport
+
+The table below is the original analysis of *local stdio* vs *a per-user-mapping
+HTTP gateway*; it's why stdio (not a gateway) is the local default, and why the
+shipped Worker is a thin stateless passthrough rather than that gateway.
+
+| Dimension | Local stdio (default) | Remote HTTP + per-user-mapping gateway (not built) |
 |---|---|---|
 | Identity model | memberKey is a per-user secret in the host's config; one user ↔ one 积木LCA member identity | Would need a server-side per-user → memberKey mapping table (new infra) |
 | SSO bridge | None needed — host holds the memberKey locally, sends it as `appId` header per call | Gateway `forward-auth` would need a way to translate an upstream agent's auth into 积木LCA's `appId` header — and there's no shared SSO to bridge |
@@ -98,15 +112,16 @@ HiQ's internal SSO domain) — was considered and rejected for v0.
 | Geographic latency | Direct user → open.ecdigit.com (CN-side) | If hosted outside CN, would add a trans-Pacific hop per call |
 | Operational precedent | Cursor / Claude Code / Cortex Desktop all spawn stdio MCPs already; well-trodden | Each host has a different remote-MCP story; less portable |
 
-### Why local wins for v0
+### Why stdio (not a gateway) is the default
 
 1. **Auth model mismatch.** Open platform uses `appId: app:<memberKey>` header,
    not bearer JWT, not SSO cookie. Gateway forward-auth patterns (which work
    when host SSO and target SSO share a tenant) have nothing to validate
    against here.
-2. **Multi-user is out of scope for v0.** Without per-user identity at the
-   server, the centralised-deploy benefits collapse — it'd be a single
-   passthrough proxy with all the deployment overhead.
+2. **No server-side per-user identity.** Without it, a central gateway's
+   benefits collapse — it'd be a single passthrough proxy with all the
+   deployment overhead. The Worker instead stays stateless (client holds the
+   key), getting the HTTP transport without the gateway.
 3. **Stdio is the universal MCP transport.** Every major MCP-capable agent
    host already spawns stdio child processes — Claude Code, Cursor, Continue,
    OpenAI Codex extensions, and Cortex Desktop all do it. One mechanism,
@@ -188,9 +203,9 @@ indirection.
 
 Cortex Desktop has a richer integration than the bare-bones JSON config:
 
-1. **Skill-gated registration** — when the
-   `jimu-lca-product-carbon` skill is installed (skill marketplace UI),
-   Cortex Desktop registers this MCP. Uninstall the skill, the MCP detaches.
+1. **Connector-gated registration** — Cortex Desktop registers this MCP when the
+   user enables the 积木LCA connector (its companion `jimu-lca` skill ships
+   alongside). Disable it and the MCP detaches.
 2. **Settings UI** — Cortex Desktop's Integrations panel exposes a dedicated
    card for 积木LCA: member-key input (stored in the OS keychain, never on
    disk in plaintext), prod/pre/dev environment switcher, "Test connection"
@@ -256,22 +271,20 @@ keeps the settings surface clean for users who don't use 积木LCA at all.
 
 ## Multi-user model
 
-Out of scope for v0. v0 assumes a single user (the one who holds the
-memberKey) operates against their own 积木LCA workspace. For team / SaaS
-deployments, v1+ will need a server-side per-user → memberKey mapping
-(see the "remote HTTP" tradeoffs above), but that's deferred — most users
-just want personal LCA workspace access first.
+Single-user by design: one memberKey, one 积木LCA member identity, operating that
+member's own workspace. Both transports assume the caller supplies their own key
+(stdio: env var; Worker: per-request header). A server-side per-user → memberKey
+mapping for team/SaaS deployments is intentionally not built — see the gateway
+tradeoffs above.
 
-## Blast radius (during development)
+## Operating against prod
 
-During Phase 0 development the maintainer's memberKey is used (a real prod
-key against a real prod workspace, since the open platform has no sandbox
-environment that's actually wired up for this tenant). All Phase 0 / Phase 1
-smoke tests are therefore **read-only**; write-path verification waits until
-either (a) a dedicated sandbox space exists inside the prod tenant, or
-(b) we have a test member whose workspaces only contain throwaway data.
-See `docs/security.md` (TBD) for the credential-handling discipline this
-implies.
+The open platform has no separately wired sandbox for this tenant, so the CLI and
+tests run against **prod** with a real memberKey. Write-path operations
+(`create_*`, `delete_case`, `calculate_case`, `import_model`) act on real
+workspaces, so they carry `destructiveHint` and the companion skill gates them
+behind user confirmation. Credential-handling discipline is in
+[SECURITY.md](../../SECURITY.md).
 
 ## Threat model
 

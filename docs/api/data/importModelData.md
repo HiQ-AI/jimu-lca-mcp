@@ -80,7 +80,7 @@ server.registerTool(
 
 ### Skill rule (mirrors hiq-editor's "never auto-submit")
 
-The `jimu-lca-product-carbon` skill, when written, must require the
+The `jimu-lca` skill must require the
 agent to:
 
 1. Call `export_elements_excel` first to capture the pre-import state

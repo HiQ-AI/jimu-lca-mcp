@@ -105,7 +105,7 @@ destructive and require the skill's "ask before submit" gate.
 
 ### Skill rule
 
-The `jimu-lca-product-carbon` skill (when written) should treat batch
+The `jimu-lca` skill should treat batch
 edits as a **show-the-user-then-confirm** action — same gate the
 hiq-editor skill applies to `submit_review_tool`. Never auto-batch-edit
 without explicit user confirmation; the agent should show a diff

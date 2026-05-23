@@ -3,7 +3,7 @@
 > A real, traced run of the full product-carbon-footprint workflow against
 > **prod** (`open.ecdigit.com`) on 2026-05-22, using the `jimu-lca` CLI (which
 > mirrors the MCP tool surface 1:1). Captured so the companion skill
-> (`jimu-lca-product-carbon`, under construction) is written from observed
+> (the `jimu-lca` skill in cortex-skills) is written from observed
 > behavior, not from the API docs alone. Every gotcha below cost a round-trip
 > to discover — the skill exists to spend the agent's attempt budget on the
 > *modeling*, not on re-learning these.

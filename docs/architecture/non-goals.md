@@ -31,7 +31,7 @@ holds the company-level appkey.
 Reads (`list_spaces`, `list_space_members`) **are** exposed — the agent often
 needs to scope its work to "the workspace I'm in".
 
-`addProjectSpace` **is now wrapped** as `create_space` (was excluded in v0).
+`addProjectSpace` **is wrapped** as `create_space` (initially excluded, then re-evaluated).
 Re-evaluated per the "What changes this list" trigger below: a concrete Cortex
 task — *"give me my own private workspace so my modeling doesn't pollute the
 shared org-public spaces"* — can't be done with read-only space tools. The
@@ -96,7 +96,7 @@ this one. Do **not** add them here.
 
 Two events should cause a re-read:
 
-1. A concrete Cortex user task can't be done with the v0 tool surface (e.g.
+1. A concrete Cortex user task can't be done with the current tool surface (e.g.
    "I need to invite three teammates to this LCA space" — would force
    re-evaluating Group 2).
 2. A user actually completes the bootstrap dance and notices Cortex could

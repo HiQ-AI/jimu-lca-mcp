@@ -1,109 +1,105 @@
-# MCP tool surface (v0)
+# MCP tool surface
 
-The 32 LCA-runtime endpoints map to **23 MCP tools** in v0 (21 primitives wrapping the surface, plus 2 convenience aggregators for high-frequency user intents). Status legend:
+**38 tools** cover the runtime LCA loop — reference data, spaces, products and
+cases, model building, data items, background binding, calculation, and results.
+All three entry points (stdio MCP, CLI, Worker) iterate the same registry
+(`src/tools/index.ts`); the CLI exposes each as a subcommand.
 
-- 📖 read-only — safe to call freely
-- ✍️ write — `destructiveHint=True`; skill rules will require user confirmation
-- 🧩 aggregator — wraps multiple upstream calls into one
-- 🎯 convenience aggregator — captures a common high-value user-intent in
-  one call (different from 🧩 which is mostly about avoiding silent failure
-  modes); high LLM ergonomics
-- ⏸ deferred — wrapping postponed until use case appears
+Status legend:
 
-The surface was sized by walking 6 representative Cortex agent user stories
-end-to-end against prod (see `tests/user_story_trace.py`). Findings that
-drove tool decisions:
-
-- Story 2 ("LCIA detail for product X") and Story 5 ("top contributors to
-  GWP") each take 5–10 wire calls in the raw API. Both got new 🎯
-  convenience aggregators (`get_product_lcia`, `get_top_contributors`).
-- Story 1 ("highest GWP in space") needs only `list_products` — its
-  `co2Content` is on every row, no drill required. No aggregator.
-- Story 4 ("locate data item to edit") drills the same stage→process→items
-  path `get_case_overview` already aggregates. Reuse, don't duplicate.
-- `getCaseDetail.versionId` ≠ the actually-calculated `versionId` in
-  some cases (real footgun observed in Story 2). The
-  `list_case_calculation_methods` MCP wrapper plus
-  `get_product_lcia` aggregator both handle this internally so the agent
-  never has to loop over versions by hand.
+- 📖 **read** — no state change; safe to call freely.
+- ✍️ **destructive** — `destructiveHint` is set (bulk overwrite or delete); a host
+  should require user confirmation. Note that `create_*` / `add_*` / `edit_*` /
+  `calculate_*` also mutate server state but are not flagged destructive because
+  they are additive and reversible in the UI; the companion skill still gates the
+  high-impact ones (calculate, create) behind confirmation.
+- 🧩 **aggregator** — fuses several upstream calls into one (avoids a multi-call
+  trap or a silent-failure shape).
+- 🎯 **convenience aggregator** — collapses a common high-value user intent into a
+  single call for LLM ergonomics; the primitives remain available underneath.
 
 ## Tool list
 
-### Public data (3 / 3 upstream endpoints — no aggregation)
+### Reference data
 
 | Tool | Upstream | Notes |
 |---|---|---|
-| 📖 `get_units` | `GET /lca/v3/getAllUnits` | Unit groups (mass, energy, ...) and each group's unit list. Reference data the agent uses when reading / writing exchange values. |
-| 📖 `list_background_db_versions` | `GET /lca/v3/getAllocationVersions` | Background database versions (Ecoinvent 3.10 / 3.11 / HiQ 1.2 / combined). Returns `versionId` needed by `list_calculation_methods` and `addCaseCalculationTask`. |
-| 📖 `list_calculation_methods(version_id)` | `GET /lca/v3/getAssignedCalculationMethods` | LCIA methods (e.g. IPCC GWP100, CML-IA, etc.) available to the tenant under a given background DB version. `versionId` is required (it sits in the "请求参数" sub-table separately from the "请求头" table). |
+| 📖 `get_units` | `getAllUnits` | Unit groups + units; filter with `query` / `unit_group`. Reference data for reading/writing exchange values. |
+| 📖 `list_background_db_versions` | `getAllocationVersions` | Background-DB versions (Ecoinvent / HiQ / combined). Returns the `versionId` other tools need. |
+| 📖 `list_calculation_methods` | `getAssignedCalculationMethods` | LCIA methods (IPCC GWP100, CML-IA, …) for a given background-DB version. |
+| 📖 `list_industries` | — | Industry tags (the `industry_id` source for product creation). |
+| 📖 `check_connectivity` | (probe) | Health-checks the open + manager API surfaces. |
 
-### Space management (3 / 7 upstream endpoints — 4 membership/governance writes deferred to web UI)
-
-| Tool | Upstream | Notes |
-|---|---|---|
-| 📖 `list_spaces` | `GET /lca/v3/getProjectSpaces` | Lists workspaces the member can see. Returns name, id, permission level, group list. |
-| 📖 `list_space_members(space_id)` | `GET /lca/v3/getMembersBySpaceId` | Lists members of a specific workspace. |
-| ✍️ `create_space(name, description?)` | `POST /lca/v3/addProjectSpace` | Creates a **private** workspace owned by the memberKey (+ a default root group). Gives the user an isolated space so modeling work doesn't land in shared org-public spaces. Skill rule: confirm name before creating — there is no delete-space tool (web-UI only). |
-
-`addMemberToSpaceBatch` (also used for role updates) / `getAllUser` /
-`deleteMemberFromSpaceBatch` are **not wrapped** — those are teammate/role
-governance the user does in the web UI. See
-[non-goals.md](non-goals.md#group-2--space-membership-writes).
-
-### Model library (1 / 1 upstream endpoint)
+### Spaces
 
 | Tool | Upstream | Notes |
 |---|---|---|
-| 📖 `list_models` | `GET /lca/v3/getModelList` | LCA process model templates the user can copy from when starting a new case. |
+| 📖 `list_spaces` | `getProjectSpaces` | Workspaces the member can see. |
+| 📖 `list_space_members` | `getMembersBySpaceId` | Members of a workspace. |
+| 📖 `create_space` | `addProjectSpace` | Creates a **private** workspace owned by the caller (+ default root group). Confirm the name first — there is no delete-space tool (web-UI only). |
 
-### Product management (5 / 10 upstream endpoints — case-read aggregated, write separated)
+Membership/role governance (`addMemberToSpaceBatch`, `deleteMemberFromSpaceBatch`,
+`getAllUser`) is **not wrapped** — see [non-goals.md](non-goals.md#group-2--space-membership-writes).
 
-| Tool | Upstream | Notes |
-|---|---|---|
-| ✍️ `create_product(...)` | `POST /lca/v3/addBrand` | Creates a product "brand". One per product line. |
-| 📖 `list_products(space_id, page, ...)` | `POST /lca/v3/getBrandPage` | Paginated product list scoped to a space. |
-| 📖 `get_product(brand_id)` | `GET /lca/v3/getBrandInfo` | Product metadata (name, description, units, ...). |
-| 🧩📖 `get_case_overview(case_id)` | `getCaseDetail` + `getCaseStage` + N × `getProcessList` + N × `getDataConfigurationList(page=1, size=200)` + `getCaseDisposals` | **Aggregator** — N+3 upstream calls (where N = number of life-cycle stages) fused into one response so the LLM gets the full case picture in one shot. See the aggregator shape below. |
-| ⏸ `get_data_config(config_id)` | `POST /lca/v3/getDataConfigurationDetail` | Single config drill-down. Kept separate from `get_case_overview` because it can be heavy; the agent calls it after deciding which config matters. |
-| ✍️ `copy_case(case_id)` | `POST /lca/v3/copyCase` | Clone an existing LCA case (e.g. to model a variant). |
-| ✍️ `delete_case(case_id)` | `POST /lca/v3/deleteCase` | Soft-delete an LCA case. |
-
-### Data input (4 / 4 upstream endpoints — no aggregation)
+### Models, products & cases
 
 | Tool | Upstream | Notes |
 |---|---|---|
-| 📖 `list_data_items(case_id, ...)` | `GET /lca/v3/getElementList` | Lists the fillable data items (inputs / outputs / emissions) of a case. |
-| ✍️ `edit_data_items(case_id, items[])` | `POST /lca/v3/editElements` | Updates one or more data items. Batched write — `destructiveHint=True`. |
-| 📖 `export_elements_excel(case_id, out_path)` | `GET /lca/v3/exportElementData` | Saves the data-items workbook to a local path. Returns the path for downstream tools (e.g. user manual review). |
-| ✍️ `import_elements_excel(case_id, file_path)` | `POST /lca/v3/importModelData` | Bulk-updates data items from a local Excel file. **Big-blast-radius write** — must be preceded by an `export` + diff confirmation. |
+| 📖 `list_models` | `getModelList` | Process-model templates to start a case from. |
+| 📖 `create_product` | `addBrand` | Create a product (brand) from a model template. |
+| 📖 `create_custom_product` | `addBrand` | Create a custom product (no template; empty shell). |
+| 📖 `create_blank_product` | (chain) | 🧩 Create custom product + case + stages in one call (baked enums). |
+| 📖 `list_products` | `getBrandPage` | Paginated products in a space, with headline GWP. |
+| 📖 `get_product` | `getBrandInfo` | Product detail + the LCA cases under it. |
+| 🧩📖 `get_case_overview` | `getCaseDetail` + `getCaseStage` + N×`getProcessList` + N×`getDataConfigurationList` + `getCaseDisposals` | Full case picture in one response (see the aggregator shape below). |
+| 📖 `copy_case` | `copyCase` | Duplicate a case (e.g. to model a variant). |
+| ✍️ `delete_case` | `deleteCase` | Delete a case. Previews unless confirmed. |
 
-### Submit calculation (5 / 6 upstream endpoints — `getCaseDisposals` folded into `calculate_case`)
-
-| Tool | Upstream | Notes |
-|---|---|---|
-| 🧩✍️ `calculate_case(case_id, ...)` | `GET /lca/v3/getCaseDisposals` (prefetch) + `POST /lca/v3/addCaseCalculationTask` | **Aggregator** — the calc task body requires the product+disposal list as input; the prefetch automates that. Skill rule: agent must surface what's about to be calculated and **ask before submit**. |
-| 📖 `list_case_calculation_methods(case_id)` | `GET /lca/v3/getCaseCalculationMethods` | Historical calculation methods previously run on this case version. |
-| 📖 `get_lcia_detail(case_id, method_id)` | `POST /lca/v3/getCaseLciaDetails` | LCIA results for one (case, method) pair. The agent's headline result fetcher. |
-| ⏸ ✍️ `publish_data(...)` | `POST /lca/v3/publishData` | Upload report data. Semantics unclear from docs; wrap once a real use case appears. |
-| 📖 `get_sensitivity(case_id)` | `POST /lca/v3/getCaseSensitive` | Sensitivity analysis results. |
-
-### Uncertainty analysis (1 / 1)
+### Model building (custom products)
 
 | Tool | Upstream | Notes |
 |---|---|---|
-| ⏸ ✍️ `submit_uncertainty_analysis(...)` | `POST /lca/v3/submitUncertaintyAnalysis` | Monte Carlo / uncertainty calc trigger. Async — need to clarify polling. |
+| 📖 `add_case` | (chain) | Create an LCA case + stages on a custom product. |
+| 📖 `add_case_process` | (chain) | Add a process to a stage. |
+| 📖 `add_data_items` | (chain) | Add data items to a process. |
 
-### Convenience aggregators (added after user-story testing)
+### Data items
 
-| Tool | Upstream chain it collapses | Notes |
+| Tool | Upstream | Notes |
 |---|---|---|
-| 🎯📖 `get_product_lcia(name_or_brand_id, indicator='GWP', target_product=None)` | `getBrandPage` → `getBrandInfo` → `getCaseDetail` → version-discovery loop over `getCaseCalculationMethods` → `getCaseLciaDetails` | Story 2 collapsed: "show me the LCIA for product X" goes from 5 raw calls (worst case 10 if version-discovery loops) to one tool. Filters indicator (default GWP), picks the first target product if not specified. |
-| 🎯📖 `get_top_contributors(product_or_case_id, indicator='GWP', threshold=0.05)` | All of the above + `getCaseSensitive` | Story 5 collapsed: "what's driving the GWP of product X" goes from 10 raw calls to one tool. Returns the sorted top-N contributing data items with their share. |
+| 📖 `list_data_items` | `getElementList` | Data items inside a process. |
+| 📖 `get_model_items` | (chain) | 🧩 Every data item of a case (all processes) in one call. |
+| 📖 `edit_data_items` | `editElements` | Batch-edit data items (array of edits). |
+| 📖 `export_elements_excel` | `exportElementData` | Export a case's data items to a local `.xlsx`. |
+| ✍️ `import_elements_excel` | `importModelData` | Bulk-overwrite data items from a local `.xlsx`. Pair with an export + diff first. |
+| ✍️ `import_model` | `excel/importModelData` | One-shot: build a whole model from a filled template `.xlsx`. |
 
-Both also accept the primitive tools' params for flexibility — agents that
-want full control (multi-target, indicator switching, threshold tuning) can
-still call the primitives directly. The 🎯 tools are not the only path,
-they're the **default** path for their respective intents.
+### Background matching
+
+| Tool | Upstream | Notes |
+|---|---|---|
+| 📖 `search_backgrounds` | `lcaUpPageList` (+ ZH fallback) | Batch fuzzy-search background datasets, ranked; returns `bind_uuid` + `background_data_id`. |
+| 📖 `bind_backgrounds` | `saveConfiguration` | Bind chosen datasets to a stage's flows (batched). |
+| 📖 `bind_backgrounds_local` | bridge + `saveConfiguration` | Bind by **local catalog `dataset_key`** — resolves to binding ids through the version bridge, no jimu-side search. Unresolved ones fall back to search. See [local-bridge.md](local-bridge.md). |
+
+### Calculation & results
+
+| Tool | Upstream | Notes |
+|---|---|---|
+| 📖 `validate_case` | (validation) | Validate a case — score + 修改项 / 确认项 before calculating. |
+| 🧩📖 `calculate_case` | `getCaseDisposals` (prefetch) + `addCaseCalculationTask` | Triggers the LCIA calc; auto-prefetches the disposal/product metadata the task body needs. The skill must surface what's about to run and **ask before submit**. |
+| 📖 `get_calc_status` | (poll) | Async calc status (done / failed / running). |
+| 📖 `list_case_calculation_methods` | `getCaseCalculationMethods` | Historical calc methods + records on a case. |
+| 📖 `get_lcia_detail` | `getCaseLciaDetails` | LCIA result rows for a (case, method). |
+| 📖 `get_sensitivity` | `getCaseSensitive` | Per-data-item contribution share. |
+| 🎯📖 `get_result` | (chain) | GWP + data-quality/provenance + an estimate disclaimer, in one read. |
+| 🎯📖 `get_product_lcia` | `getBrandPage`→`getBrandInfo`→`getCaseDetail`→version discovery→`getCaseLciaDetails` | "LCIA for product X" in one call; collapses up to ~10 raw calls. |
+| 🎯📖 `get_top_contributors` | the above + `getCaseSensitive` | "What's driving product X's GWP" — sorted top contributors with their share. |
+
+The 🎯 aggregators also accept the primitives' params, so an agent that wants full
+control (multi-target, indicator switching, threshold tuning) can still call the
+primitives directly — the aggregator is the **default** path for the intent, not
+the only one.
 
 ## `get_case_overview` aggregator shape
 
@@ -235,7 +231,8 @@ default, not a vow.
   with backgrounds pre-bound; the real fill→calculate gotchas were
   product-output activity data + the validation-snapshot cache, not source
   binding. Promote when an agent needs to debug an item's backing.
-- `publish_data` — semantics unclear in docs; need a real case
-- `submit_uncertainty_analysis` — async; need polling story
+- `publish_data` — semantics unclear in the docs; needs a real use case
+- `submit_uncertainty_analysis` — async; needs a polling story
 
-These exist in `docs/api/` for completeness but get no MCP tool until phase 1.
+These remain documented in `docs/api/` for completeness but are intentionally
+unwrapped until a concrete need appears.

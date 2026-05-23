@@ -85,6 +85,21 @@ Lookups normalise the version name (so the live API's version string and the
 export's version name compare equal despite spacing) and the system-model label
 (so the catalog's `cut_off` matches the export's `Cut-off`).
 
+### Two backings, one schema
+
+The lookup is transport-agnostic behind `BridgeLookup` (`src/bridge.ts`):
+
+- **Worker → D1** (`d1Bridge`): the table above, queried over D1.
+- **stdio / CLI → local SQLite** (`sqliteBridge`, `src/sqliteBridge.ts`): the same
+  table in a local `.db` file, read with the built-in `node:sqlite` (no native
+  addon — runs clean under Electron-as-node). `openLocalBridge` resolves the file
+  from `JIMU_LCA_BRIDGE_DB` first, then a bundled `<pkg>/data/bridge.db`. With
+  neither present the bridge is unavailable and callers use the search path.
+
+The `.db` is **not** committed and **not** in the npm tarball (`files` ships only
+`dist/`): at ~170 MB it is too big to bundle, and it refreshes on the dataset's
+cadence, not the package's. Hosts provision it themselves (next section).
+
 ## Building and refreshing
 
 The export files are operator artifacts; neither they nor the generated SQL are
@@ -118,3 +133,28 @@ The full multi-version dump is ~500k rows. On D1's free plan (100,000 row writes
 per day) that exceeds the daily budget, so either load a narrowed dump or load the
 full set on a paid plan. Either way `bind_backgrounds_local` falls back to search
 for any version/model not in the table, so a narrowed bridge is always safe.
+
+## Local `.db` and how hosts provision it
+
+The same dump builds the local SQLite file the stdio/CLI backing reads:
+
+```bash
+python3 scripts/build-bridge.py *.xlsx -o bridge.sql   # one authoritative dump
+sqlite3 bridge.db < bridge.sql                          # → bridge.db (~170 MB)
+```
+
+Because the file is too big to bundle, hosts download it on demand. The release
+pipeline attaches a **gzipped** copy to this repo's GitHub Release, alongside the
+code:
+
+```bash
+gzip -k bridge.db                       # → bridge.db.gz (~57 MB transfer)
+gh release upload v0.2.0 bridge.db.gz   # same tag as the npm/tarball release
+```
+
+One release tag therefore pins both the code and the bridge data. A consuming
+host (e.g. Cortex Desktop) downloads `bridge.db.gz` once, decompresses and
+checksum-verifies it, caches it under its app-data directory, and points
+`JIMU_LCA_BRIDGE_DB` at the cached file. Until that download completes the bridge
+is simply unavailable and binding falls back to search — no failure, just the
+slower path.

@@ -1,105 +1,45 @@
 # jimu-lca-mcp
 
-MCP server and companion CLI for the **积木LCA 3.0** product-carbon-footprint
-workspace on 易碳云开放平台 (<https://cloud.ecdigit.com/jimulca>).
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-**Built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)** —
-an AI-powered LCA data workbench that orchestrates product carbon footprinting
-across an LCA practitioner's working day. Because it speaks the standard MCP
-stdio protocol, it also runs unmodified against any other MCP-capable agent
-host (Claude Code, OpenAI Codex, Cursor, Continue, …). The same Python package
-ships a `jimu-lca` CLI for scripted use, smoke tests, and operators who don't
-want to wire up an agent.
+An [MCP](https://modelcontextprotocol.io) server and companion CLI for the
+**积木LCA 3.0** product-carbon-footprint workspace on 易碳云开放平台
+(<https://cloud.ecdigit.com/jimulca>). It lets an AI agent — or a script — drive
+the full LCA loop: create a product and case, build the model, bind background
+LCI datasets, run the calculation, and read back results and contributions.
 
-Sibling-but-independent to [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
-which authors background LCI datasets on `editor.hiqlcd.com`. The two
-products are complementary — `editor-mcp-server` *produces* background
-data; this repo *consumes* that data to compute product carbon footprints.
+The same tool surface is served three ways from one shared core:
 
-## Status
+| Transport | Entry | For |
+|---|---|---|
+| **HTTP** (Streamable) | Cloudflare Worker at `https://jimu-lca-mcp.hiq.earth/mcp` | any remote-MCP-capable host, zero install |
+| **stdio** | `npx jimu-lca-mcp` | local agent hosts (Claude Desktop/Code, Cursor, Continue, …) |
+| **CLI** | `npx jimu-lca-mcp <cmd>` (`bin: jimu-lca`) | scripts, smoke tests, operators with no agent |
 
-**Phase 0 — investigation and documentation.** No runtime code yet. The repo
-currently exists to:
+It is built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)
+but speaks standard MCP, so it runs unmodified against any MCP host. It is a
+sibling to (and independent from) [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
+which *authors* the background LCI datasets that this server *consumes*.
 
-1. Catalog the 易碳云开放平台 API surface for 积木LCA 3.0 (37 endpoints — 5
-   admin / bootstrap, 32 LCA-runtime)
-2. Capture design decisions: which endpoints to wrap, which to aggregate, which
-   to leave to the web UI
-3. Document the auth model, env model, and host-integration shape (including
-   a Settings-UI pattern for desktop hosts)
-4. Document each endpoint's request / response schema, gotchas, and proposed
-   MCP tool mapping
+> **Disclaimer.** Independent client — not affiliated with or endorsed by 易碳云 /
+> 积木LCA. See [NOTICE](NOTICE).
 
-Coding begins after the docs settle and the open questions in
-`docs/architecture/non-goals.md` are closed.
+## Quickstart
 
-## Deployment
+### Remote HTTP (no install)
 
-The HTTP Worker is deployed by **Cloudflare Workers Builds**, which builds and
-publishes automatically on every push to `main`. The canonical endpoint is
-`https://jimu-lca-mcp.hiq.earth/mcp`, and changes go live within a few minutes of a
-merge. A manual deploy is available as a fallback:
+Point any host that supports remote MCP at the hosted Worker. For example, with
+Claude Code:
 
 ```bash
-npm run worker:deploy   # wrangler deploy; requires CLOUDFLARE_API_TOKEN
+claude mcp add --transport http jimu-lca https://jimu-lca-mcp.hiq.earth/mcp \
+  --header "Authorization: Bearer app:xxxxxxxxxxxxxxxxxxx"
 ```
 
-### Transports and file input
+The Worker reads the member key per request from `Authorization: Bearer app:…`
+(or an `X-Member-Key` header) — it stores no session state.
 
-The same tool surface is served three ways — a stdio MCP server, a CLI, and the
-Cloudflare Worker (HTTP). The Worker runs without a local filesystem, so tools that
-take a file accept its **content over the wire** (base64) in addition to a local
-`file_path`; the path form is resolved only by the CLI and stdio MCP, which run on a
-host with disk access. Tools degrade gracefully and report which input form a given
-transport supports. See [`docs/architecture/file-input.md`](docs/architecture/file-input.md).
-
-### Background matching
-
-Binding a flow to a background LCI dataset normally means a fuzzy name search
-(`search_backgrounds`) followed by a save (`bind_backgrounds`). Hosts that ship a
-local copy of the LCI catalogs can skip the search: grep the catalog locally, then
-pass the dataset's `dataset_key` to `bind_backgrounds_local`, which resolves it to
-积木's binding ids through a bundled version mapping and saves in one call — faster
-and exact. Datasets the mapping doesn't cover come back as `unresolved`, and the
-caller falls back to the search path for those. See
-[`docs/architecture/local-bridge.md`](docs/architecture/local-bridge.md).
-
-## Architecture (TL;DR)
-
-- **Local stdio MCP**, spawned by the agent host as a child process. **No** K3s
-  deployment, **no** API gateway — 积木LCA's `appId: app:xxx` auth doesn't
-  share a tenant with any SSO an agent host might natively integrate with, so
-  a remote-HTTP gateway pattern wouldn't add value here.
-- **Companion `jimu-lca` CLI** in the same package — same operations as the
-  MCP tools, exposed as subcommands for scripts, smoke tests, and operator
-  workflows. Useful when there's no agent in the loop.
-- **Auth** = single env var `JIMU_LCA_MEMBER_KEY` (value `app:xxxxxxxxxx`).
-  One memberKey per end user; obtained from the open-platform admin console.
-- **Companion skill** `jimu-lca-product-carbon` (under construction) for hosts
-  that support the [Anthropic skill format](https://github.com/anthropics/claude-cookbooks),
-  documenting the product-LCA workflow on top of these tools.
-
-Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md)
-
-## What this MCP / CLI does NOT cover
-
-- **The 5 bootstrap / admin endpoints** (`registMember`, `queryMemberKey`,
-  `memberToken/*`, `role/listByCompany`). Those operate on a company-level
-  appkey, not a user-level memberKey, and run **once per tenant**. They live
-  with the integrator who provisions access for an end user, not with the
-  runtime MCP/CLI. See
-  [docs/architecture/non-goals.md](docs/architecture/non-goals.md).
-- **Teammate / role write operations** (`addMemberToSpaceBatch`,
-  `deleteMemberFromSpaceBatch`, role updates). These touch *other people's*
-  access — governance an end user performs in the web UI; the MCP only reads
-  space membership. (`addProjectSpace` **is** wrapped as `create_space` — it
-  creates a *private* space owned by the caller, so it's a legitimate agent
-  action, not governance. See [non-goals.md](docs/architecture/non-goals.md#group-2--space-membership-writes).)
-- **Bearer JWT lifecycle endpoints** (`memberToken/get`, `memberToken/refresh`).
-  The memberKey is the long-lived credential; short-lived JWTs are only
-  needed for SaaS-UI redirects, which an agent doesn't drive directly.
-
-## Quickstart (planned, not yet shipped)
+### Local stdio (npm)
 
 ```jsonc
 // MCP host config — e.g. claude_desktop_config.json
@@ -107,69 +47,116 @@ Full architecture: [docs/architecture/overview.md](docs/architecture/overview.md
   "mcpServers": {
     "jimu-lca": {
       "command": "npx",
-      "args": ["-y", "jimu-lca-mcp@latest"],
-      "env": {
-        "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx"
-      }
+      "args": ["-y", "jimu-lca-mcp"],
+      "env": { "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx" }
     }
   }
 }
 ```
 
+### CLI
+
 ```bash
-# CLI usage — same operations, scripted
 export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
-npx -y jimu-lca-mcp units
-npx -y jimu-lca-mcp versions
-npx -y jimu-lca-mcp products list --space <space-id>
-npx -y jimu-lca-mcp case overview <case-id>
+npx -y jimu-lca-mcp units                       # list unit groups
+npx -y jimu-lca-mcp versions                    # background-DB versions
+npx -y jimu-lca-mcp products list --space <id>  # products in a space
+npx -y jimu-lca-mcp case overview <case-id>     # a case's stages + status
 ```
 
-CLI surface mirrors the MCP tool surface 1:1; same parameter names, same
-response semantics. See [docs/architecture/tools.md](docs/architecture/tools.md).
+The CLI mirrors the MCP tool surface 1:1 — same parameter names, same response
+semantics — and prints JSON by default. See [docs/architecture/tools.md](docs/architecture/tools.md).
 
-## Layout
+## Authentication
+
+A single environment variable, `JIMU_LCA_MEMBER_KEY`, holds the member key
+(`app:xxxxxxxxxx`) — one per end user, obtained from the open-platform admin
+console. It is the long-lived credential; the server mints short-lived Bearer
+JWTs from it as needed, in memory. Never commit it. See [SECURITY.md](SECURITY.md).
+
+## Tool surface
+
+37 tools cover the runtime LCA loop — spaces, products, cases, model items,
+background binding, calculation, and results — plus a few aggregators that
+collapse common multi-call intents (e.g. `get_top_contributors`,
+`create_custom_product`). Read operations are safe to call freely; write
+operations are marked `destructiveHint` so a host can gate them. The full
+endpoint → tool mapping, with status flags, is in
+[docs/architecture/tools.md](docs/architecture/tools.md).
+
+### Background matching and the local bridge
+
+Binding a flow to a background LCI dataset normally means a fuzzy name search
+(`search_backgrounds`) followed by a save (`bind_backgrounds`). Hosts that ship a
+local copy of the LCI catalogs can skip the search: pass the dataset's
+`dataset_key` to `bind_backgrounds_local`, which resolves it to 积木's binding ids
+through a **version bridge** and saves in one call — faster and exact. Datasets
+the bridge doesn't cover come back as `unresolved`, and the caller falls back to
+the search path.
+
+The bridge is a ~170 MB SQLite table, too big to bundle and refreshed on the
+dataset's own cadence. The Worker backs it with Cloudflare D1; local hosts
+provision a `.db` file (Cortex Desktop downloads it once from this repo's GitHub
+Release). See [docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
+
+### File input across transports
+
+Some tools take a file (e.g. `import_model` uploads a filled `.xlsx`). The stdio
+server and CLI accept a local `file_path`; the Worker, which has no filesystem,
+accepts the file content as base64 over the wire. Tools report which form a
+transport supports. See [docs/architecture/file-input.md](docs/architecture/file-input.md).
+
+## What this does NOT cover
+
+By design, the server does **not** wrap tenant-bootstrap/admin endpoints
+(`registMember`, `queryMemberKey`, `memberToken/*`, `role/listByCompany`) or
+governance writes over *other people's* access (batch membership / role updates).
+Those are one-time, human-admin, or web-UI operations — not agent actions. The
+reasoning, endpoint by endpoint, is in
+[docs/architecture/non-goals.md](docs/architecture/non-goals.md).
+
+## Repository layout
 
 ```
 jimu-lca-mcp/
-├── README.md
+├── src/
+│   ├── server.ts          # stdio MCP server entry
+│   ├── cli.ts             # CLI entry (same operations as MCP tools)
+│   ├── worker.ts          # Cloudflare Worker (HTTP) entry
+│   ├── api.ts             # shared HTTP client       auth.ts  # memberKey → headers
+│   ├── tools/             # one ToolDef per tool (+ index.ts registry)
+│   ├── bridge.ts          # BridgeLookup contract + D1 backing
+│   ├── sqliteBridge.ts    # local-file backing (node:sqlite)
+│   ├── binding.ts files.ts search.ts env.ts logger.ts types.ts
+│   └── connector/         # host connector manifest
 ├── docs/
-│   ├── architecture/
-│   │   ├── overview.md          # auth / env / host integration / Settings-UI pattern
-│   │   ├── non-goals.md         # what we don't wrap and why
-│   │   └── tools.md             # 32 endpoints → 22 MCP tool / CLI subcommand mapping
-│   ├── api/                     # one .md per endpoint (32 LCA + 5 admin)
-│   │   ├── README.md            # index
-│   │   ├── public/getAllUnits.md
-│   │   └── ...
-│   └── api-raw/                 # raw openResource/getById JSONs, source of truth
-├── src/                         # TypeScript runtime (empty until Phase 1)
-│   ├── server.ts                #   MCP stdio server entry
-│   ├── cli.ts                   #   CLI entry (same operations as MCP tools)
-│   ├── auth.ts                  #   memberKey → `appId` header
-│   ├── api.ts                   #   shared HTTP client
-│   ├── tools/                   #   one file per MCP tool
-│   └── ...
-├── package.json                 # npm metadata; `bin` exposes jimu-lca-mcp
-├── tsconfig.json
-└── tests/                       # (gitignored — local-only test scaffolding)
+│   ├── architecture/      # design + behaviour (start at overview.md)
+│   ├── api/               # one .md per upstream endpoint (curated reference)
+│   └── api-raw/           # the platform's raw API-portal JSON, kept as provenance
+├── scripts/build-bridge.py
+├── .github/workflows/release.yml
+└── package.json  tsconfig.json  wrangler.toml
 ```
 
-## Reading order
+## Documentation
 
-1. [docs/architecture/overview.md](docs/architecture/overview.md) — auth, env,
-   host integration patterns, Settings-UI design
-2. [docs/architecture/non-goals.md](docs/architecture/non-goals.md) — what we
-   skip and why
-3. [docs/architecture/tools.md](docs/architecture/tools.md) — 23-entry tool /
-   CLI subcommand surface
-3b. [docs/architecture/workflow-walkthrough.md](docs/architecture/workflow-walkthrough.md) —
-   a real traced end-to-end run + the gotchas the companion skill must encode
-4. [docs/architecture/phase1-design.md](docs/architecture/phase1-design.md) —
-   runtime design: three entry points (stdio MCP + CLI + Cloudflare Worker)
-   from one shared core, Connector-readiness, phase order
-5. [docs/api/README.md](docs/api/README.md) — per-endpoint deep dives
+1. [docs/architecture/overview.md](docs/architecture/overview.md) — positioning,
+   auth/env model, host-integration shape.
+2. [docs/architecture/tools.md](docs/architecture/tools.md) — the endpoint → tool
+   surface.
+3. [docs/architecture/workflow-walkthrough.md](docs/architecture/workflow-walkthrough.md) —
+   a real end-to-end traced run and its gotchas.
+4. [docs/architecture/local-bridge.md](docs/architecture/local-bridge.md) ·
+   [file-input.md](docs/architecture/file-input.md) ·
+   [non-goals.md](docs/architecture/non-goals.md) — focused topics.
+5. [docs/api/README.md](docs/api/README.md) — per-endpoint reference.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: Node ≥ 20, `npm install`,
+`npm run build`, add a tool by dropping a `ToolDef` into `src/tools/` and
+registering it in `src/tools/index.ts`.
 
 ## License
 
-TBD.
+[Apache License 2.0](LICENSE) © HiQ-AI. See [NOTICE](NOTICE) for attributions.

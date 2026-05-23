@@ -93,7 +93,7 @@ server.registerTool(
 
 ### Skill rule
 
-`jimu-lca-product-carbon` skill (when written) treats `calculate_case`
+`jimu-lca` skill treats `calculate_case`
 as a **destructive, user-confirmed** action:
 
 1. Show the user what's about to be calculated (case name, method

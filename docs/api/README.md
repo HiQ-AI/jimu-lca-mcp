@@ -5,12 +5,16 @@ Per-endpoint markdown (this directory) is **derived** from those JSONs plus our 
 
 ## How to refresh from upstream
 
+The raw JSONs in [../api-raw/](../api-raw/) are pulled from the platform's
+`openResource/getById` endpoint (one per `apiId`). After updating them,
+regenerate the per-endpoint scaffolds:
+
 ```
-python3 scripts/fetch_docs.py            # re-download all 37 raw JSONs
-python3 scripts/render_endpoint_docs.py  # regenerate per-endpoint .md scaffolds
+python3 scripts/render_endpoint_docs.py  # api-raw/*.json → per-endpoint .md scaffolds
 ```
 
-(Scripts not yet written — coming in the docs-tooling commit.)
+The curated notes (smoke tests, aggregation decisions, gotchas) in each `.md`
+are written by hand on top of the generated scaffold.
 
 ## Index
 
@@ -32,12 +36,12 @@ python3 scripts/render_endpoint_docs.py  # regenerate per-endpoint .md scaffolds
 | [查询背景数据库版本列表](public/getAllocationVersions.md) | GET | `/lca/v3/getAllocationVersions` | `list_background_db_versions` |
 | [查询当前租户已分配的计算方法](public/getAssignedCalculationMethods.md) | GET | `/lca/v3/getAssignedCalculationMethods` | `list_calculation_methods(version_id)` |
 
-### Space management (7 — 2 wrapped, 5 deferred to web UI)
+### Space management (7 — 3 wrapped, 4 left to the web UI)
 
 | Endpoint | Method | URL | MCP tool |
 |---|---|---|---|
 | [查询空间列表](spaces/getProjectSpaces.md) | GET | `/lca/v3/getProjectSpaces` | `list_spaces` |
-| [创建空间](spaces/addProjectSpace.md) | POST | `/lca/v3/addProjectSpace` | (not wrapped) |
+| [创建空间](spaces/addProjectSpace.md) | POST | `/lca/v3/addProjectSpace` | `create_space` |
 | [查询用户列表](spaces/getAllUser.md) | GET | `/lca/v3/getAllUser` | (not wrapped) |
 | [添加成员](spaces/addMemberToSpaceBatch.md) | POST | `/lca/v3/addMemberToSpaceBatch` | (not wrapped) |
 | [查询空间成员](spaces/getMembersBySpaceId.md) | GET | `/lca/v3/getMembersBySpaceId` | `list_space_members` |
