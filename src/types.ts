@@ -11,6 +11,7 @@
  */
 
 import type { z } from "zod";
+import type { BridgeLookup } from "./bridge.js";
 
 /**
  * Logger shape — minimal. Stdio MCP uses stderr; CLI uses stderr; Worker uses
@@ -34,6 +35,12 @@ export interface ToolContext {
   /** Workers-compatible fetch. Node entries pass globalThis.fetch. */
   fetch: typeof globalThis.fetch;
   logger: Logger;
+  /**
+   * Local-catalog → jimu binding bridge, when a backing store is bound (the
+   * Worker's D1). Undefined on transports without one (stdio / CLI today); the
+   * Cortex save tool then reports the bridge unavailable.
+   */
+  bridge?: BridgeLookup;
 }
 
 /**

@@ -19,12 +19,17 @@ import { allTools } from "./tools/index.js";
 import { contextFromRequest } from "./auth.js";
 import { consoleLogger } from "./logger.js";
 import { JimuLcaError } from "./types.js";
+import { d1Bridge, type D1DatabaseLike } from "./bridge.js";
 import { VERSION } from "./env.js";
 import manifest from "./connector/manifest.json" with { type: "json" };
 
 interface Env {
   JIMU_LCA_BASE_URL?: string;
   JIMU_LCA_ENV?: string;
+  /** D1 binding backing the local-catalog → jimu binding bridge. Optional: when
+   *  unbound (binding not yet provisioned), bind_backgrounds_local reports the
+   *  bridge unavailable and callers fall back to search → bind_backgrounds. */
+  DB?: D1DatabaseLike;
 }
 
 const JSON_HEADERS = {
@@ -72,6 +77,8 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
     }
     throw err;
   }
+
+  if (env.DB) ctx.bridge = d1Bridge(env.DB);
 
   const server = new McpServer({ name: "jimu-lca", version: VERSION });
   for (const tool of allTools) {

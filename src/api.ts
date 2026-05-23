@@ -265,6 +265,32 @@ export async function callManager<T = unknown>(
   return env.data;
 }
 
+// Background-DB version list, cached per memberKey for the isolate's lifetime.
+// The id↔name pairing is tenant-stable, so a process-lifetime cache is safe and
+// spares a round trip on every bridge resolve. Keyed by memberKey for the same
+// single-user-per-key invariant noted on _tokenCache.
+interface AllocationVersion {
+  id: string;
+  version: string;
+}
+const _versionNameCache = new Map<string, Map<string, string>>();
+
+/** Resolve a background-DB `versionId` to its version NAME (e.g.
+ *  "Ecoinvent3.12+HiQ1.4.0"), via `/lca/v3/getAllocationVersions`. Returns null
+ *  if no version matches the id. */
+export async function getAllocationVersionName(
+  ctx: ToolContext,
+  versionId: string,
+): Promise<string | null> {
+  let byId = _versionNameCache.get(ctx.memberKey);
+  if (!byId) {
+    const rows = await get<AllocationVersion[]>(ctx, "/lca/v3/getAllocationVersions");
+    byId = new Map((rows ?? []).map((r) => [String(r.id), r.version]));
+    _versionNameCache.set(ctx.memberKey, byId);
+  }
+  return byId.get(String(versionId)) ?? null;
+}
+
 /** Pull a human-readable message out of a validation item (shape varies:
  *  plain string, or object with message/cnName/name/ruleName). */
 function validationMsg(item: unknown): string {

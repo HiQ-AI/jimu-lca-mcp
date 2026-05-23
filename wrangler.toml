@@ -19,6 +19,17 @@ routes = [
 [vars]
 JIMU_LCA_ENV = "prod"
 
+# Local-catalog → 积木 binding bridge (powers bind_backgrounds_local). Optional:
+# the Worker deploys and runs without it; bind_backgrounds_local simply reports
+# the bridge unavailable until DB is bound. Provision once, then uncomment — see
+# docs/architecture/local-bridge.md.
+#   wrangler d1 create jimu-lca-bridge
+#   wrangler d1 import jimu-lca-bridge --file=bridge.sql --remote
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "jimu-lca-bridge"
+# database_id = "<id from `wrangler d1 create`>"
+
 # The Worker never calls keychain APIs — auth comes from the request header.
 # Alias keytar to a no-op shim so wrangler's bundler doesn't try to ship the
 # native .node binary.

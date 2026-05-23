@@ -32,9 +32,9 @@ import { addCase } from "./add_case.js";
 import { addCaseProcess } from "./add_case_process.js";
 import { addDataItems } from "./add_data_items.js";
 import { validateCase } from "./validate_case.js";
-import { searchBackgroundData } from "./search_background_data.js";
 import { searchBackgrounds } from "./search_backgrounds.js";
-import { matchBackgrounds } from "./match_background.js";
+import { bindBackgrounds } from "./bind_backgrounds.js";
+import { bindBackgroundsLocal } from "./bind_backgrounds_local.js";
 import { getModelItems } from "./get_model_items.js";
 import { getResult } from "./get_result.js";
 import { importModel } from "./import_model.js";
@@ -91,9 +91,9 @@ export const allTools: ToolDef[] = [
   addCase,
   addCaseProcess,
   addDataItems,
-  searchBackgroundData,
   searchBackgrounds,
-  matchBackgrounds,
+  bindBackgrounds,
+  bindBackgroundsLocal,
   importModel,
   validateCase,
   copyCase,

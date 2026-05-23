@@ -23,6 +23,14 @@ secrets/
 # Test scaffolding stays local — never publish (fixtures may carry customer data)
 tests/
 
+# Binding-bridge artifacts — the 积木 mapping exports and the generated D1 dump
+# are operator inputs/outputs, loaded into D1 out of band (docs/architecture/local-bridge.md)
+*.xlsx
+bridge.sql
+
+# Local CLI/session state (carries working space + case ids)
+jimu-lca-session.json
+
 # Python (docs tooling — scripts/render_endpoint_docs.py)
 __pycache__/
 *.py[cod]

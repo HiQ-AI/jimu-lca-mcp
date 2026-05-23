@@ -53,6 +53,17 @@ take a file accept its **content over the wire** (base64) in addition to a local
 host with disk access. Tools degrade gracefully and report which input form a given
 transport supports. See [`docs/architecture/file-input.md`](docs/architecture/file-input.md).
 
+### Background matching
+
+Binding a flow to a background LCI dataset normally means a fuzzy name search
+(`search_backgrounds`) followed by a save (`bind_backgrounds`). Hosts that ship a
+local copy of the LCI catalogs can skip the search: grep the catalog locally, then
+pass the dataset's `dataset_key` to `bind_backgrounds_local`, which resolves it to
+积木's binding ids through a bundled version mapping and saves in one call — faster
+and exact. Datasets the mapping doesn't cover come back as `unresolved`, and the
+caller falls back to the search path for those. See
+[`docs/architecture/local-bridge.md`](docs/architecture/local-bridge.md).
+
 ## Architecture (TL;DR)
 
 - **Local stdio MCP**, spawned by the agent host as a child process. **No** K3s

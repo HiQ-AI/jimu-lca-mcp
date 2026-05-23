@@ -66,7 +66,7 @@ export const createBlankProduct: ToolDef<typeof Args, unknown> = {
       } as never,
       ctx,
     );
-    return { brand_id: brandId, case_id: caseId, next: "build_import_xlsx.py → import_model(case_id) → match_backgrounds → validate_case → calculate_case" };
+    return { brand_id: brandId, case_id: caseId, next: "build_import_xlsx.py → import_model(case_id) → bind_backgrounds → validate_case → calculate_case" };
   },
   cli: { summary: "Create custom product + case + stages in one call (baked enums)." },
 };

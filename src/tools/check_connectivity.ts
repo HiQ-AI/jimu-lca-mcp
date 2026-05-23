@@ -15,7 +15,7 @@ export const checkConnectivity: ToolDef<typeof Args, unknown> = {
     "API (query path) and the internal manager API (authoring path — custom " +
     "products, background binding, validation). Run this first if anything fails " +
     "unexpectedly. manager_api:false means the authoring tools (create_blank_product, " +
-    "import_model, match_backgrounds, validate_case, calculate_case's pre-checks) " +
+    "import_model, bind_backgrounds, validate_case, calculate_case's pre-checks) " +
     "won't work — the undocumented manager API or the memberKey→JWT mint is down.",
   inputSchema: Args,
   annotations: { readOnlyHint: true },

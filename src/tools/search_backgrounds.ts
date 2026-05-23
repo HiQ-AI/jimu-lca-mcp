@@ -87,7 +87,7 @@ export const searchBackgrounds: ToolDef<typeof Args, unknown> = {
     "(which covers datasets that have no Chinese index — e.g. freight transport — and is " +
     "usually the precise path; English names come straight from a report or the catalog), " +
     "and falls back to the Chinese-name search for Chinese terms. Returns, per name, ranked " +
-    "candidates with `bind_uuid` + `background_data_id` (both needed by match_backgrounds), " +
+    "candidates with `bind_uuid` + `background_data_id` (both needed by bind_backgrounds), " +
     "CN/EN name, region, unit, unit_group, per-unit co2. Pick by region + unit, then bind by " +
     "`bind_uuid`. Tip: prefer the dataset's EN name (e.g. 'market for transport, freight, lorry, " +
     ">32 metric ton') for the most precise hit.",
