@@ -49,7 +49,9 @@ INSERT_COLUMNS = (
     "version_key, system_model_key, system_model, orig_uuid, "
     "background_data_id, bind_uuid, name_cn, name_en, location, unit"
 )
-BATCH = 1000
+# Rows per INSERT. D1 caps a single SQL statement at ~100 KB, so keep batches
+# small enough that even long dataset names stay well under it.
+BATCH = 100
 
 
 def version_key(name: str) -> str:
@@ -74,7 +76,7 @@ def sql_str(v: str | None) -> str:
     return "'" + v.replace("'", "''") + "'"
 
 
-def parse_file(path: Path, rows: dict) -> int:
+def parse_file(path: Path, rows: dict, keep: set[str] | None = None) -> int:
     # read_only=True is intentionally avoided: these exports ship a malformed
     # sheet dimension ("A1"), and openpyxl's read-only iterator trusts it and
     # yields zero rows. The full loader recomputes dimensions and reads correctly.
@@ -93,6 +95,8 @@ def parse_file(path: Path, rows: dict) -> int:
             continue
         vkey = version_key(version)
         smkey = system_model_key(system_model)
+        if keep is not None and smkey not in keep:
+            continue
         name_cn = cell(raw, COL_NAME_CN)
         name_en = cell(raw, COL_NAME_EN)
         location = cell(raw, COL_LOCATION)
@@ -119,14 +123,22 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("inputs", nargs="+", help="背景数据映射管理 export xlsx files")
     ap.add_argument("-o", "--out", default="bridge.sql", help="output SQL path")
+    ap.add_argument(
+        "--system-model",
+        action="append",
+        help="Keep only these system models (e.g. Cut-off). Repeatable. Useful for "
+        "incremental loads that fit a daily write budget. Default: all.",
+    )
     args = ap.parse_args()
+
+    keep = {system_model_key(m) for m in args.system_model} if args.system_model else None
 
     rows: dict = {}
     for name in args.inputs:
         path = Path(name).expanduser()
         if not path.exists():
             sys.exit(f"missing input: {path}")
-        added = parse_file(path, rows)
+        added = parse_file(path, rows, keep)
         print(f"  {path.name}: +{added} rows (cumulative {len(rows)})", file=sys.stderr)
 
     out = Path(args.out).expanduser()

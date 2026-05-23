@@ -91,29 +91,25 @@ The export files are operator artifacts; neither they nor the generated SQL are
 committed (see `.gitignore`). Refresh when 积木 re-imports a background database.
 
 ```bash
-# 1. Build the SQL dump from the per-version mapping exports.
-python3 scripts/build-bridge.py \
-  Ecoinvent3.10.xlsx Ecoinvent3.10+HiQ1.2.xlsx Ecoinvent3.11.xlsx \
-  Ecoinvent3.12.xlsx Ecoinvent3.12+HiQ1.4.0.xlsx \
-  -o bridge.sql
+# 1. Build the SQL dump from the per-version mapping exports. Pass only the
+#    versions you need; --system-model narrows it further (see the write budget below).
+python3 scripts/build-bridge.py Ecoinvent3.12+HiQ1.4.0.xlsx --system-model Cut-off -o bridge.sql
 
 # 2. Provision the database once (records database_id for wrangler.toml).
 wrangler d1 create jimu-lca-bridge
 
-# 3. Load (or reload) the data. `d1 import` is the bulk path — it batches and
-#    streams the dump (~140 MB / ~500k rows), where `d1 execute --file` is for
-#    small scripts.
-wrangler d1 import jimu-lca-bridge --file=bridge.sql --remote
+# 3. Load (or reload) the data.
+wrangler d1 execute jimu-lca-bridge --file=bridge.sql --remote
 ```
 
-Then add the binding to `wrangler.toml`:
+Then set the `database_id` in `wrangler.toml`'s `[[d1_databases]]` block (binding
+`DB`). The next push to `main` deploys a Worker that resolves local datasets
+through the bridge.
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "jimu-lca-bridge"
-database_id = "<id from step 2>"
-```
+### Write budget
 
-The next push to `main` deploys a Worker that resolves local datasets through the
-bridge.
+D1's free plan allows 100,000 row writes per day, so the full multi-version dump
+(~500k rows) cannot load in one pass on it. Load incrementally — one version and
+system model at a time fits comfortably (e.g. Ecoinvent3.12+HiQ1.4.0 Cut-off is
+~55k rows) — or load the whole set at once on a paid plan. `bind_backgrounds_local`
+falls back to search for anything not yet loaded, so a partial bridge is always safe.
