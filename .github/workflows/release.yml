@@ -1,0 +1,48 @@
+# Publish a release on a version tag.
+#
+# Two delivery channels, both anonymous for consumers (no token to install):
+#   1. npm  — `npm publish` with provenance, so hosts `npx jimu-lca-mcp` or
+#             depend on `jimu-lca-mcp@^x.y.z`. Requires the NPM_TOKEN secret
+#             (an npm automation token) configured on this repo.
+#   2. GitHub Release — carries the packed tarball AND the bridge data asset.
+#
+# The bridge data (bridge.db.gz, ~57 MB) is an OPERATOR artifact built from the
+# 背景数据映射管理 xlsx exports (see docs/architecture/local-bridge.md) — CI can't
+# build it. Upload it to the same release after this workflow runs:
+#     gzip -k bridge.db && gh release upload v0.2.0 bridge.db.gz
+# One release tag = one version of {code (npm + tarball), bridge.db.gz}.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # create the GitHub Release
+  id-token: write   # npm provenance (sigstore)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run build
+      - name: Publish to npm (with provenance)
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Pack tarball for the GitHub Release
+        id: pack
+        run: echo "tgz=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+      - name: Create / update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tgz }}" \
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
+          || gh release upload "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tgz }}" --clobber
