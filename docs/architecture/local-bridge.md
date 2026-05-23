@@ -106,10 +106,15 @@ Then set the `database_id` in `wrangler.toml`'s `[[d1_databases]]` block (bindin
 `DB`). The next push to `main` deploys a Worker that resolves local datasets
 through the bridge.
 
-### Write budget
+### Scope and write budget
 
-D1's free plan allows 100,000 row writes per day, so the full multi-version dump
-(~500k rows) cannot load in one pass on it. Load incrementally — one version and
-system model at a time fits comfortably (e.g. Ecoinvent3.12+HiQ1.4.0 Cut-off is
-~55k rows) — or load the whole set at once on a paid plan. `bind_backgrounds_local`
-falls back to search for anything not yet loaded, so a partial bridge is always safe.
+`build-bridge.py` emits a self-contained dump (`DROP TABLE` + `CREATE` + rows +
+index), so a load fully **replaces** the table — it is one authoritative load, not
+an append. To bridge a subset, narrow the dump itself: pass only the version files
+you need and add `--system-model` to keep specific models (e.g.
+`--system-model Cut-off` yields ~55k rows for Ecoinvent3.12+HiQ1.4.0).
+
+The full multi-version dump is ~500k rows. On D1's free plan (100,000 row writes
+per day) that exceeds the daily budget, so either load a narrowed dump or load the
+full set on a paid plan. Either way `bind_backgrounds_local` falls back to search
+for any version/model not in the table, so a narrowed bridge is always safe.
