@@ -66,8 +66,8 @@ import_model({ case_id, file_path?, file_base64?, filename? })
 
 `excel/importModelData` builds the full stage→process→item structure **and**
 auto-matches background datasets by name in one upstream call. The granular JSON
-endpoints (`brand/addBatchElement` and friends) add items to an already-created
-process but do not reproduce that one-shot structure-plus-auto-match. The spreadsheet
+endpoints (such as `brand/addBatchElement`) add items to an already-created process
+but do not reproduce that one-shot structure-plus-auto-match. The spreadsheet
 import therefore remains the primary one-call model builder. A JSON-native builder, if
 introduced later, is an additional tool with its own trade-offs (more upstream calls,
 explicit matching), not a replacement — and it would not change this file-input
