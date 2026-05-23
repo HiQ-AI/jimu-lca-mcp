@@ -13,8 +13,11 @@ The same tool surface is served three ways from one shared core:
 | Transport | Entry | For |
 |---|---|---|
 | **HTTP** (Streamable) | Cloudflare Worker at `https://jimu-lca-mcp.hiq.earth/mcp` | any remote-MCP-capable host, zero install |
-| **stdio** | `npx jimu-lca-mcp` | local agent hosts (Claude Desktop/Code, Cursor, Continue, …) |
-| **CLI** | `npx jimu-lca-mcp <cmd>` (`bin: jimu-lca`) | scripts, smoke tests, operators with no agent |
+| **stdio** | `npx @hiq-ai/jimu-lca-mcp` | local agent hosts (Claude Desktop/Code, Cursor, Continue, …) |
+| **CLI** | `npx -p @hiq-ai/jimu-lca-mcp jimu-lca <cmd>` | scripts, smoke tests, operators with no agent |
+
+> Published to npm as **`@hiq-ai/jimu-lca-mcp`**; the binaries it installs are
+> `jimu-lca-mcp` (the MCP server) and `jimu-lca` (the CLI).
 
 It is built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)
 but speaks standard MCP, so it runs unmodified against any MCP host. It is a
@@ -47,7 +50,7 @@ The Worker reads the member key per request from `Authorization: Bearer app:…`
   "mcpServers": {
     "jimu-lca": {
       "command": "npx",
-      "args": ["-y", "jimu-lca-mcp"],
+      "args": ["-y", "@hiq-ai/jimu-lca-mcp"],
       "env": { "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx" }
     }
   }
@@ -58,10 +61,12 @@ The Worker reads the member key per request from `Authorization: Bearer app:…`
 
 ```bash
 export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
-npx -y jimu-lca-mcp units                       # list unit groups
-npx -y jimu-lca-mcp versions                    # background-DB versions
-npx -y jimu-lca-mcp products list --space <id>  # products in a space
-npx -y jimu-lca-mcp case overview <case-id>     # a case's stages + status
+# `-p <package> jimu-lca` selects the CLI binary (the package also ships a
+# `jimu-lca-mcp` server binary, which is what the stdio config above runs).
+npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca units                       # list unit groups
+npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca versions                    # background-DB versions
+npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca products list --space <id>  # products in a space
+npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca case overview <case-id>     # a case's stages + status
 ```
 
 The CLI mirrors the MCP tool surface 1:1 — same parameter names, same response
