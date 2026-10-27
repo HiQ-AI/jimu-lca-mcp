@@ -12,6 +12,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_BRIDGE_DB } from "./bridgeInstall.js";
 import type { Logger } from "./types.js";
 import { type BridgeLookup, type BridgeRow, systemModelKey } from "./bridge.js";
 
@@ -46,13 +47,15 @@ export function sqliteBridge(dbPath: string): BridgeLookup {
 /**
  * Resolve the local bridge DB and open it. Path priority:
  *   1. `JIMU_LCA_BRIDGE_DB` env (explicit / dev override)
- *   2. bundled `<pkg>/data/bridge.db` (dist/../data/bridge.db)
+ *   2. `jimu-lca install-bridge` user installation
+ *   3. bundled `<pkg>/data/bridge.db` (dist/../data/bridge.db)
  * Returns undefined when no DB is present — the bridge then stays unavailable
  * and callers fall back exactly as before (no regression for hosts without it).
  */
 export function openLocalBridge(logger?: Logger): BridgeLookup | undefined {
   const candidates = [
     process.env.JIMU_LCA_BRIDGE_DB,
+    DEFAULT_BRIDGE_DB,
     fileURLToPath(new URL("../data/bridge.db", import.meta.url)),
   ].filter((p): p is string => Boolean(p));
 

@@ -40,4 +40,5 @@ export function resolveManagerBaseUrl(openBaseUrl: string): string {
 }
 
 /** Library version stamp surfaced via the `version` subcommand + MCP server `serverInfo`. */
-export const VERSION = "0.2.0-alpha.1";
+import packageInfo from "../package.json" with { type: "json" };
+export const VERSION = packageInfo.version;

@@ -14,15 +14,15 @@ The same tool surface is served three ways from one shared core:
 |---|---|---|
 | **HTTP** (Streamable) | Cloudflare Worker at `https://jimu-lca-mcp.hiq.earth/mcp` | any remote-MCP-capable host, zero install |
 | **stdio** | `npx @hiq-ai/jimu-lca-mcp` | local agent hosts (Claude Desktop/Code, Cursor, Continue, …) |
-| **CLI** | `npx -p @hiq-ai/jimu-lca-mcp jimu-lca <cmd>` | scripts, smoke tests, operators with no agent |
+| **CLI** | `jimu-lca <cmd>` (standalone binary, installation below) | agents, scripts, operators without Node/npm |
 
 > Published to npm as **`@hiq-ai/jimu-lca-mcp`**; the binaries it installs are
 > `jimu-lca-mcp` (the MCP server) and `jimu-lca` (the CLI).
 
-It is built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)
-but speaks standard MCP, so it runs unmodified against any MCP host. It is a
-sibling to (and independent from) [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
-which *authors* the background LCI datasets that this server *consumes*.
+Install it independently for an agent or shell; Cortex Desktop no longer bundles
+this package or downloads its bridge resources. It remains a sibling to (and
+independent from) [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
+which *authors* the background LCI datasets that this client *consumes*.
 
 > **Disclaimer.** Independent client — not affiliated with or endorsed by 易碳云 /
 > 积木LCA. See [NOTICE](NOTICE).
@@ -57,17 +57,50 @@ The Worker reads the member key per request from `Authorization: Bearer app:…`
 }
 ```
 
-### CLI
+### Standalone CLI
+
+The native release supports **macOS Apple Silicon**, matching the verified target
+for this delivery. No installed Node, npm, Bun, Desktop, or MCP server is required.
+One install command also prepares the CLI's local binding bridge:
 
 ```bash
-export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
-# `-p <package> jimu-lca` selects the CLI binary (the package also ships a
-# `jimu-lca-mcp` server binary, which is what the stdio config above runs).
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca units                       # list unit groups
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca versions                    # background-DB versions
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca products list --space <id>  # products in a space
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca case overview <case-id>     # a case's stages + status
+curl -fsSL https://github.com/HiQ-AI/jimu-lca-mcp/releases/download/cli-v0.2.1/install.sh | sh
 ```
+
+The installer verifies the binary's SHA-256, installs `~/.local/bin/jimu-lca`, and
+runs `install-bridge`. Use `sh -s -- --directory /YOUR/BIN` for a different command
+directory. It refuses to replace an existing file; user configuration and existing
+credentials are not modified. Add the command directory to PATH if needed, or use
+the printed absolute executable path in the current agent session.
+
+To give an agent the task, ask: "Read the standalone CLI installation section at
+https://github.com/HiQ-AI/jimu-lca-mcp#standalone-cli, install it, and verify help
+and version; do not configure a Desktop connector or call business APIs before I
+supply my own memberKey."
+
+The macOS binary is ad-hoc signed, not Developer-ID signed or notarized. This is
+not a Windows/Intel Mac/Linux release. Native `login` does not bundle the optional
+keytar addon; supply `JIMU_LCA_MEMBER_KEY` through your host's controlled credential
+mechanism instead. Installing the CLI/bridge needs no memberKey.
+
+```bash
+jimu-lca --help
+jimu-lca version                         # same value as --version
+# Set your own memberKey through your host's controlled credential mechanism.
+jimu-lca get-units --query kg
+jimu-lca list-background-db-versions
+jimu-lca list-products --space-id YOUR_SPACE_ID
+jimu-lca get-case-overview --case-id YOUR_CASE_ID
+```
+
+Source remains in this repository and the existing `@hiq-ai/jimu-lca-mcp` package.
+The historical npm 0.2.0 release remains deprecated; this native release does not
+publish an extra npm patch or restore the withdrawn Cortex Desktop connector,
+skill marketplace entry, or old catalog binding compatibility. Source builds use
+Node.js >= 22.13.0; standalone builds use pinned Bun 1.4.4 (same single-file
+compile pattern as cortex-org-wiki-cli), reusing all existing business commands.
+`cli-v*` tags publish native assets through this repository's existing GitHub
+Release channel; ordinary `v*` tags retain the existing npm workflow.
 
 The CLI mirrors the MCP tool surface 1:1 — same parameter names, same response
 semantics — and prints JSON by default. See [docs/architecture/tools.md](docs/architecture/tools.md).
@@ -107,18 +140,21 @@ The **local bridge** is an optional accelerator for the one case where that gap
 can be closed: 积木's per-version mapping export preserves each dataset's original
 pre-import uuid, which *does* equal the standardized catalog uuid. Precomputing
 that into a lookup table (catalog uuid + version + system model → 积木's binding
-ids) lets a host that ships the standardized catalogs — in practice **HiQ Cortex
-Desktop** — skip the search and call `bind_backgrounds_local` for an exact,
-one-shot bind. Anything the bridge doesn't cover comes back `unresolved` and
-falls back to the search path.
+ids) supports `bind-backgrounds-local` in the CLI. The input remains a source
+activity UUID (or the historical UUID_version form), not a current opaque Relic
+`dataset_key`. This patch does not change that binding contract; use
+`search-backgrounds` + `bind-backgrounds` when it does not apply. The bridge's
+finite version coverage is not a guarantee of current upstream dataset coverage.
 
-**Most users never touch the bridge** — remote/HTTP hosts, the CLI, and any host
-without the local catalogs all use `search_backgrounds` + `bind_backgrounds`. The
-bridge is a ~170 MB SQLite table (`bridge.db`), too big to bundle and refreshed on
-the dataset's own cadence: the Worker backs it with Cloudflare D1, and local
-catalog-shipping hosts download a gzipped copy (`bridge.db.gz`, ~55 MB) once from
-this repo's GitHub Release. See
-[docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
+`jimu-lca install-bridge` downloads the existing v0.2.0 gzip (~57 MB) from
+`download.hiq.earth`, verifies the decompressed SHA-256, and atomically installs
+`~/.jimu-lca/v0.2.0/bridge.db` (~170 MB). Re-running verifies/reuses that file.
+Neither help/version nor ordinary remote commands download anything. CLI and
+stdio MCP resolve the existing `JIMU_LCA_BRIDGE_DB` override first, then this
+installation, then the legacy package-local data path. No automatic Desktop
+provisioning is involved. The optional bridge is unnecessary for name-search
+binding; the Worker still uses its existing D1 path, unchanged by this release.
+See [docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
 
 ### File input across transports
 
@@ -174,7 +210,7 @@ jimu-lca-mcp/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short: Node ≥ 20, `npm install`,
+See [CONTRIBUTING.md](CONTRIBUTING.md). In short: Node >= 22.13.0, `npm install`,
 `npm run build`, add a tool by dropping a `ToolDef` into `src/tools/` and
 registering it in `src/tools/index.ts`.
 

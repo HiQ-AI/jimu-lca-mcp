@@ -15,11 +15,13 @@
 # build it. Upload it to the same release after this workflow runs:
 #     gzip -k bridge.db && gh release upload v0.2.0 bridge.db.gz
 # One release tag = one version of {code (npm + tarball), bridge.db.gz}.
+# cli-v* adds native CLI assets to the same GitHub Release channel without
+# publishing another npm version or modifying the historical deprecated ones.
 name: release
 
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'cli-v*']
 
 permissions:
   contents: write   # create the GitHub Release
@@ -27,6 +29,7 @@ permissions:
 
 jobs:
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,3 +53,30 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tgz }}" \
             --title "$GITHUB_REF_NAME" --generate-notes --verify-tag \
           || gh release upload "$GITHUB_REF_NAME" "${{ steps.pack.outputs.tgz }}" --clobber
+
+  native-cli:
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Verify release version
+        run: test "$GITHUB_REF_NAME" = "cli-v$(node -p 'require("./package.json").version')"
+      - run: bash scripts/build-cli.sh
+      - run: node scripts/check-cli.mjs build/native/jimu-lca-darwin-arm64
+      - name: Publish standalone CLI to the existing GitHub Release channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/native/jimu-lca-darwin-arm64 build/native/checksums.txt build/native/install.sh \
+            --title "jimu-lca ${GITHUB_REF_NAME#cli-v} (macOS Apple Silicon)" \
+            --notes 'Standalone CLI; no Node/npm/Desktop/MCP server required. Reuses the published v0.2.0 bridge. macOS Apple Silicon only; ad-hoc signed, not notarized. Existing catalog UUID binding constraints remain unchanged.' --verify-tag
