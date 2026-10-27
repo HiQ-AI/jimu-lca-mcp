@@ -8,7 +8,7 @@ if [ "$#" -gt 0 ]; then
 fi
 [ "$(uname -s)-$(uname -m)" = 'Darwin-arm64' ] || { printf '%s\n' 'This release supports macOS Apple Silicon only.' >&2; exit 1; }
 [ ! -e "$DIRECTORY/jimu-lca" ] && [ ! -L "$DIRECTORY/jimu-lca" ] || { printf '%s\n' 'jimu-lca already exists; choose a new --directory or explicitly remove the old installation.' >&2; exit 1; }
-BASE="https://github.com/HiQ-AI/jimu-lca-mcp/releases/download/cli-v$VERSION"
+BASE="https://download.hiq.earth/cli/jimu-lca/v$VERSION"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/jimu-lca-install.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 curl -fsSL "$BASE/jimu-lca-darwin-arm64" -o "$WORK/jimu-lca-darwin-arm64"
