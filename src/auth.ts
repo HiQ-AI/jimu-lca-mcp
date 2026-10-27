@@ -1,12 +1,10 @@
 /**
- * memberKey resolution. Two entry sources:
+ * CLI memberKey resolution:
  *
- * - Stdio MCP + CLI: env var `JIMU_LCA_MEMBER_KEY` (or OS keychain if
+ * - env var `JIMU_LCA_MEMBER_KEY` (or OS keychain if
  *   `keytar` is available and a `jimu-lca login` flow has stored it).
- * - HTTP MCP (Cloudflare Worker): `X-Member-Key` header, or
- *   `Authorization: Bearer app:...` header.
  *
- * Both paths funnel into {@link validateMemberKey}, which is the single
+ * Inputs pass through {@link validateMemberKey}, which is the single
  * format check anywhere in the codebase.
  */
 
@@ -27,7 +25,7 @@ export function validateMemberKey(raw: string | undefined | null): string {
   if (!raw || raw.trim() === "") {
     throw new JimuLcaError(
       "auth",
-      "memberKey missing — set JIMU_LCA_MEMBER_KEY env var, run `jimu-lca login`, or pass `X-Member-Key` header for HTTP transport.",
+      "memberKey missing — set JIMU_LCA_MEMBER_KEY env var, run `jimu-lca login`.",
     );
   }
   const v = raw.trim();
@@ -79,8 +77,7 @@ export async function writeKeychain(key: string): Promise<void> {
 }
 
 /**
- * Build a {@link ToolContext} from process env. Used by the stdio MCP entry
- * and by the CLI. Reads JIMU_LCA_MEMBER_KEY first, falls back to keychain.
+ * Build a {@link ToolContext} from process env for the CLI. Reads JIMU_LCA_MEMBER_KEY first, falls back to keychain.
  */
 export async function contextFromEnv(logger: Logger): Promise<ToolContext> {
   const fromEnv = process.env.JIMU_LCA_MEMBER_KEY;
@@ -91,33 +88,6 @@ export async function contextFromEnv(logger: Logger): Promise<ToolContext> {
     process.env.JIMU_LCA_ENV,
   );
   return { memberKey, baseUrl, fetch: globalThis.fetch.bind(globalThis), logger };
-}
-
-/**
- * Build a {@link ToolContext} from an inbound HTTP request. Used by the
- * Cloudflare Worker entry.
- *
- * Header conventions supported (the Connector UI passes whichever it likes):
- *
- * - `X-Member-Key: app:xxxxx`
- * - `Authorization: Bearer app:xxxxx`
- */
-export function contextFromRequest(
-  req: Request,
-  envOverrides: { baseUrl?: string; env?: string } = {},
-  logger: Logger,
-): ToolContext {
-  const headerKey = req.headers.get("x-member-key");
-  const authHeader = req.headers.get("authorization");
-  const bearerKey = authHeader?.replace(/^Bearer\s+/i, "").trim();
-  const memberKey = validateMemberKey(headerKey ?? bearerKey ?? null);
-  const baseUrl = resolveBaseUrl(envOverrides.baseUrl ?? null, envOverrides.env ?? null);
-  return {
-    memberKey,
-    baseUrl,
-    fetch: globalThis.fetch.bind(globalThis),
-    logger,
-  };
 }
 
 /** Re-exports for convenience. */

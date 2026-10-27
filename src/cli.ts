@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * Subprocess-friendly CLI. What `npx -y jimu-lca <subcommand>` runs.
+ * Subprocess-friendly CLI, compiled as the standalone `jimu-lca` executable.
  *
  * Every tool from {@link allTools} is exposed as a subcommand. Outputs JSON
- * by default (pipe-friendly: `jimu-lca products --space=x | jq ...`); pass
+ * by default (pipe-friendly: `jimu-lca list-products --space-id=x | jq ...`); pass
  * `--pretty` for the human-readable renderer.
  *
- * Two extra non-tool subcommands:
- *   - `login`  — store memberKey in OS keychain
+ * Extra non-tool subcommands:
+ *   - `login`  — store memberKey in OS keychain (optional keytar)
  *   - `version` — print version
+ *   - `install-bridge` — prepare the existing local binding resource
  */
 import { z } from "zod";
 import yargs from "yargs";
@@ -20,6 +21,8 @@ import { contextFromEnv, writeKeychain } from "./auth.js";
 import { stderrLogger } from "./logger.js";
 import { JimuLcaError, type ToolDef } from "./types.js";
 import { VERSION } from "./env.js";
+import { installBridge } from "./bridgeInstall.js";
+import { openLocalBridge } from "./sqliteBridge.js";
 
 interface CliOpts {
   pretty?: boolean;
@@ -145,6 +148,7 @@ function buildToolCommand(tool: ToolDef) {
           }
         }
         const parsed = schema.parse(args);
+        if (tool.name === "bind_backgrounds_local") ctx.bridge = openLocalBridge(stderrLogger);
         const result = await tool.handler(parsed, ctx);
         emitResult(tool, result, opts);
       } catch (err) {
@@ -160,6 +164,7 @@ async function main(): Promise<void> {
     .strict()
     .help()
     .alias("h", "help")
+    .version(VERSION)
     .demandCommand(1, "");
 
   for (const tool of allTools) {
@@ -186,6 +191,19 @@ async function main(): Promise<void> {
     (yy) => yy,
     () => {
       process.stdout.write(VERSION + "\n");
+    },
+  );
+
+  y = y.command(
+    "install-bridge",
+    "Download and verify the optional local SQLite binding bridge (no memberKey needed).",
+    (yy) => yy,
+    async () => {
+      try {
+        process.stdout.write(JSON.stringify(await installBridge(), null, 2) + "\n");
+      } catch (err) {
+        emitError(err, { errorsAsJson: true });
+      }
     },
   );
 

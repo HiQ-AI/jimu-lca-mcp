@@ -1,183 +1,125 @@
-# jimu-lca-mcp
+# JiMULCA CLI
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+Standalone `jimu-lca` for the existing **积木LCA 3.0** product-carbon-footprint
+operations on 易碳云开放平台 (<https://cloud.ecdigit.com/jimulca>). It reuses this
+repository's business commands, HTTP client and SQLite binding bridge; it does
+not implement a new LCA engine.
 
-An [MCP](https://modelcontextprotocol.io) server and companion CLI for the
-**积木LCA 3.0** product-carbon-footprint workspace on 易碳云开放平台
-(<https://cloud.ecdigit.com/jimulca>). It lets an AI agent — or a script — drive
-the full LCA loop: create a product and case, build the model, bind background
-LCI datasets, run the calculation, and read back results and contributions.
+Independent client, not affiliated with or endorsed by 易碳云 / 积木LCA. See
+[NOTICE](NOTICE) and [Apache-2.0 license](LICENSE).
 
-The same tool surface is served three ways from one shared core:
+## Install
 
-| Transport | Entry | For |
-|---|---|---|
-| **HTTP** (Streamable) | Cloudflare Worker at `https://jimu-lca-mcp.hiq.earth/mcp` | any remote-MCP-capable host, zero install |
-| **stdio** | `npx @hiq-ai/jimu-lca-mcp` | local agent hosts (Claude Desktop/Code, Cursor, Continue, …) |
-| **CLI** | `npx -p @hiq-ai/jimu-lca-mcp jimu-lca <cmd>` | scripts, smoke tests, operators with no agent |
+Current native release: **0.2.1, macOS Apple Silicon only**. No preinstalled Node,
+npm, Bun, Desktop or MCP server is required. One command installs the executable
+and prepares its local binding resource:
 
-> Published to npm as **`@hiq-ai/jimu-lca-mcp`**; the binaries it installs are
-> `jimu-lca-mcp` (the MCP server) and `jimu-lca` (the CLI).
-
-It is built primarily for [HiQ Cortex Desktop](https://github.com/HiQ-AI/cortex-desktop)
-but speaks standard MCP, so it runs unmodified against any MCP host. It is a
-sibling to (and independent from) [editor-mcp-server](https://github.com/HiQ-AI/editor-mcp-server),
-which *authors* the background LCI datasets that this server *consumes*.
-
-> **Disclaimer.** Independent client — not affiliated with or endorsed by 易碳云 /
-> 积木LCA. See [NOTICE](NOTICE).
-
-## Quickstart
-
-### Remote HTTP (no install)
-
-Point any host that supports remote MCP at the hosted Worker. For example, with
-Claude Code:
-
-```bash
-claude mcp add --transport http jimu-lca https://jimu-lca-mcp.hiq.earth/mcp \
-  --header "Authorization: Bearer app:xxxxxxxxxxxxxxxxxxx"
+```sh
+curl -fsSL https://download.hiq.earth/cli/jimu-lca/install.sh | sh
 ```
 
-The Worker reads the member key per request from `Authorization: Bearer app:…`
-(or an `X-Member-Key` header) — it stores no session state.
+To give an agent the task:
 
-### Local stdio (npm)
+> Install JiMULCA CLI using https://download.hiq.earth/cli/jimu-lca/install.sh ,
+> then verify help/version. Do not configure a Desktop connector or call business
+> APIs before I supply my own memberKey.
 
-```jsonc
-// MCP host config — e.g. claude_desktop_config.json
-{
-  "mcpServers": {
-    "jimu-lca": {
-      "command": "npx",
-      "args": ["-y", "@hiq-ai/jimu-lca-mcp"],
-      "env": { "JIMU_LCA_MEMBER_KEY": "app:xxxxxxxxxxxxxxxxxxx" }
-    }
-  }
-}
+The installer downloads the versioned binary from the same CDN, verifies its
+SHA-256 and version, installs `~/.local/bin/jimu-lca`, and runs `install-bridge`.
+For another command directory, append `| sh -s -- --directory /YOUR/BIN` instead
+of `| sh`. It refuses to replace an existing file or symlink. Add that directory
+to PATH if needed; an agent can use the printed absolute executable path in the
+current session. Installation needs no account key and changes no credentials.
+
+The binary is **ad-hoc signed, not Developer-ID signed or notarized**. No
+Windows/Intel Mac/Linux release is claimed. No cross-platform business or GUI
+acceptance is implied by the installation check.
+
+## Use
+
+```sh
+jimu-lca --help
+jimu-lca version                         # same version as --version
+jimu-lca get-units --help
+# Supply your own memberKey through your host's controlled credential mechanism.
+jimu-lca get-units --query kg
+jimu-lca list-background-db-versions
+jimu-lca list-products --space-id YOUR_SPACE_ID
+jimu-lca get-case-overview --case-id YOUR_CASE_ID
 ```
 
-### CLI
+`JIMU_LCA_MEMBER_KEY` is the existing per-user credential (`app:xxxxxxxx`), obtained
+from the open-platform admin console. It grants API access as that member; never
+commit it, put it in an agent prompt, or include it in a report. The existing
+optional source-mode `login` command uses keytar, but that native addon is not
+bundled in this standalone release: use host-controlled `JIMU_LCA_MEMBER_KEY`.
+Short-lived manager tokens remain in memory. See [SECURITY.md](SECURITY.md).
 
-```bash
-export JIMU_LCA_MEMBER_KEY=app:xxxxxxxxxxxxxxxxxxx
-# `-p <package> jimu-lca` selects the CLI binary (the package also ships a
-# `jimu-lca-mcp` server binary, which is what the stdio config above runs).
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca units                       # list unit groups
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca versions                    # background-DB versions
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca products list --space <id>  # products in a space
-npx -y -p @hiq-ai/jimu-lca-mcp jimu-lca case overview <case-id>     # a case's stages + status
+Existing business operations remain subcommands with kebab-case options, JSON
+stdout, and optional `--pretty` rendering. `--errors-as-json` gives structured
+stderr for business-command failures; nonzero exit means failure. Read, edit,
+bind and calculate operations retain their existing business effects. The full
+operation reference remains [docs/architecture/tools.md](docs/architecture/tools.md);
+its historical MCP/Worker examples are not current installation instructions.
+
+## SQLite Bridge And Binding Boundary
+
+Normal name-search binding uses `search-backgrounds` + `bind-backgrounds` and
+needs no local bridge. For UUID-based binding, `install-bridge` downloads the
+existing v0.2.0 gzip (~57 MB) from
+`https://download.hiq.earth/resources/jimu-lca/v0.2.0/bridge.db.gz`, verifies the
+decompressed SHA-256, and atomically installs
+`~/.jimu-lca/v0.2.0/bridge.db` (~170 MB). Re-running verifies/reuses that file.
+Help/version and ordinary remote commands do not download resources.
+
+The CLI resolves an explicit `JIMU_LCA_BRIDGE_DB` first, then its own installed
+resource. `bind-backgrounds-local` now opens the existing SQLite implementation.
+Its input remains a source activity UUID (or the historical UUID_version form),
+**not a current opaque Relic `dataset_key`**. This release does not change that
+contract or extend the bridge's finite dataset/version coverage. Use normal
+name-search binding when it does not apply; unresolved entries are not invented.
+
+## Distribution And Removed MCP Surface
+
+Cortex Desktop no longer installs this package, ships/downloads its bridge, or
+provisions its runtime. Other LCA catalogs and CLIs are independent and unchanged.
+The withdrawn connector and marketplace skill are not restored.
+
+Only the CLI is built and published going forward. MCP stdio/Worker entry points,
+connector metadata, SDK/Worker-only dependencies, Wrangler deployment config and
+npm publishing workflow are removed. The build package keeps its existing
+`@hiq-ai/jimu-lca-mcp` name but is private; it is not a new npm product. Historical
+public npm versions (including their deprecated flags), GitHub assets and remote
+infrastructure are not deleted or republished by this change.
+
+`cli-vVERSION` tags build standalone assets into this repository's existing
+GitHub Release channel. Consumer installation uses the existing HiQ
+`download.hiq.earth` S3/CloudFront channel, under `cli/jimu-lca/vVERSION/`; the
+stable `cli/jimu-lca/install.sh` pins the published version. No generic installer
+service or Desktop release is introduced.
+
+## Development And Release
+
+Source builds require Node >= 22.13.0; native builds use pinned **Bun 1.4.4**
+(the same standalone compile pattern as cortex-org-wiki-cli). Bun's native
+`node:sqlite` support runs the existing SQLite queries without an adapter.
+
+```sh
+npm ci --ignore-scripts
+npm run build
+npm run build:cli
+node scripts/check-cli.mjs build/native/jimu-lca-darwin-arm64
 ```
 
-The CLI mirrors the MCP tool surface 1:1 — same parameter names, same response
-semantics — and prints JSON by default. See [docs/architecture/tools.md](docs/architecture/tools.md).
+The bounded check runs help/version, existing `get-units` against a loopback
+fixture, a real SQLite query through `bind-backgrounds-local`, and missing-bridge
+rejection. It makes no real business API calls or writes.
 
-## Authentication
-
-A single environment variable, `JIMU_LCA_MEMBER_KEY`, holds the member key
-(`app:xxxxxxxxxx`) — one per end user, obtained from the open-platform admin
-console. It is the long-lived credential; the server mints short-lived Bearer
-JWTs from it as needed, in memory. Never commit it. See [SECURITY.md](SECURITY.md).
-
-## Tool surface
-
-37 tools cover the runtime LCA loop — spaces, products, cases, model items,
-background binding, calculation, and results — plus a few aggregators that
-collapse common multi-call intents (e.g. `get_top_contributors`,
-`create_custom_product`). Read operations are safe to call freely; write
-operations are marked `destructiveHint` so a host can gate them. The full
-endpoint → tool mapping, with status flags, is in
-[docs/architecture/tools.md](docs/architecture/tools.md).
-
-### Background matching, and the optional local bridge
-
-Binding a flow to a background LCI dataset normally means a fuzzy **name search**
-(`search_backgrounds`) followed by a save (`bind_backgrounds`). This is the
-default path and **works for everyone — no extra data needed.**
-
-Why search by name at all? Because 积木 **re-IDs every dataset when it imports a
-background database**: a dataset's 积木-internal uuid is assigned at import and is
-*not* the standardized source uuid. Even for Ecoinvent, 积木's uuid is not the
-official Ecoinvent uuid — and HiQLCD and other libraries are the same. So a host
-that holds the standardized catalogs locally can't name a 积木 dataset by its
-catalog uuid directly; the two id spaces are disjoint, which is why the universal
-path falls back to matching by name.
-
-The **local bridge** is an optional accelerator for the one case where that gap
-can be closed: 积木's per-version mapping export preserves each dataset's original
-pre-import uuid, which *does* equal the standardized catalog uuid. Precomputing
-that into a lookup table (catalog uuid + version + system model → 积木's binding
-ids) lets a host that ships the standardized catalogs — in practice **HiQ Cortex
-Desktop** — skip the search and call `bind_backgrounds_local` for an exact,
-one-shot bind. Anything the bridge doesn't cover comes back `unresolved` and
-falls back to the search path.
-
-**Most users never touch the bridge** — remote/HTTP hosts, the CLI, and any host
-without the local catalogs all use `search_backgrounds` + `bind_backgrounds`. The
-bridge is a ~170 MB SQLite table (`bridge.db`), too big to bundle and refreshed on
-the dataset's own cadence: the Worker backs it with Cloudflare D1, and local
-catalog-shipping hosts download a gzipped copy (`bridge.db.gz`, ~55 MB) once from
-this repo's GitHub Release. See
-[docs/architecture/local-bridge.md](docs/architecture/local-bridge.md).
-
-### File input across transports
-
-Some tools take a file (e.g. `import_model` uploads a filled `.xlsx`). The stdio
-server and CLI accept a local `file_path`; the Worker, which has no filesystem,
-accepts the file content as base64 over the wire. Tools report which form a
-transport supports. See [docs/architecture/file-input.md](docs/architecture/file-input.md).
-
-## What this does NOT cover
-
-By design, the server does **not** wrap tenant-bootstrap/admin endpoints
-(`registMember`, `queryMemberKey`, `memberToken/*`, `role/listByCompany`) or
-governance writes over *other people's* access (batch membership / role updates).
-Those are one-time, human-admin, or web-UI operations — not agent actions. The
-reasoning, endpoint by endpoint, is in
-[docs/architecture/non-goals.md](docs/architecture/non-goals.md).
-
-## Repository layout
-
-```
-jimu-lca-mcp/
-├── src/
-│   ├── server.ts          # stdio MCP server entry
-│   ├── cli.ts             # CLI entry (same operations as MCP tools)
-│   ├── worker.ts          # Cloudflare Worker (HTTP) entry
-│   ├── api.ts             # shared HTTP client       auth.ts  # memberKey → headers
-│   ├── tools/             # one ToolDef per tool (+ index.ts registry)
-│   ├── bridge.ts          # BridgeLookup contract + D1 backing
-│   ├── sqliteBridge.ts    # local-file backing (node:sqlite)
-│   ├── binding.ts files.ts search.ts env.ts logger.ts types.ts
-│   └── connector/         # host connector manifest
-├── docs/
-│   ├── architecture/      # design + behaviour (start at overview.md)
-│   ├── api/               # one .md per upstream endpoint (curated reference)
-│   └── api-raw/           # the platform's raw API-portal JSON, kept as provenance
-├── scripts/build-bridge.py
-├── .github/workflows/release.yml
-└── package.json  tsconfig.json  wrangler.toml
-```
-
-## Documentation
-
-1. [docs/architecture/overview.md](docs/architecture/overview.md) — positioning,
-   auth/env model, host-integration shape.
-2. [docs/architecture/tools.md](docs/architecture/tools.md) — the endpoint → tool
-   surface.
-3. [docs/architecture/workflow-walkthrough.md](docs/architecture/workflow-walkthrough.md) —
-   a real end-to-end traced run and its gotchas.
-4. [docs/architecture/local-bridge.md](docs/architecture/local-bridge.md) ·
-   [file-input.md](docs/architecture/file-input.md) ·
-   [non-goals.md](docs/architecture/non-goals.md) — focused topics.
-5. [docs/api/README.md](docs/api/README.md) — per-endpoint reference.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short: Node ≥ 20, `npm install`,
-`npm run build`, add a tool by dropping a `ToolDef` into `src/tools/` and
-registering it in `src/tools/index.ts`.
-
-## License
-
-[Apache License 2.0](LICENSE) © HiQ-AI. See [NOTICE](NOTICE) for attributions.
+After merge, tag the verified commit `cli-v0.2.1`. The release workflow builds and
+checks the native binary. `bash scripts/mirror-to-cdn.sh cli-v0.2.1 AWS_PROFILE`
+mirrors those verified assets using the existing bucket/distribution, with
+conditional creation rather than overwriting historical objects. This first
+release also creates the stable installer. Verify the actual CDN installation
+in a fresh HOME and a system-only PATH without Node/npm/Bun, then execute help,
+version and the bounded existing command. Build/CI success alone is not that
+installation evidence.

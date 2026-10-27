@@ -1,44 +1,21 @@
 {
   "name": "@hiq-ai/jimu-lca-mcp",
-  "version": "0.2.0",
-  "description": "MCP server + CLI for 易碳云开放平台 积木LCA 3.0 — product carbon footprint workspace.",
+  "version": "0.2.1",
+  "description": "Standalone CLI for the existing JiMULCA product carbon footprint operations.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "bin": {
-    "jimu-lca-mcp": "./dist/server.js",
     "jimu-lca": "./dist/cli.js"
   },
-  "exports": {
-    ".": "./dist/server.js",
-    "./server": "./dist/server.js",
-    "./tools": {
-      "import": "./dist/tools/index.js",
-      "types": "./dist/tools/index.d.ts"
-    },
-    "./manifest": "./src/connector/manifest.json",
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "dist",
-    "src/connector/manifest.json",
-    "README.md",
-    "LICENSE",
-    "NOTICE"
-  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/server.ts",
-    "test": "tsx tests/run-all.ts",
-    "smoke": "tsx tests/smoke.ts",
-    "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy",
-    "prepublishOnly": "npm run build"
+    "dev": "tsx src/cli.ts",
+    "build:cli": "bash scripts/build-cli.sh"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "yargs": "^18.0.0",
     "zod": "^4.4.0"
   },
@@ -46,12 +23,10 @@
     "keytar": "^7.9.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250320.0",
     "@types/node": "^22.0.0",
     "@types/yargs": "^17.0.32",
     "tsx": "^4.20.0",
-    "typescript": "^5.6.0",
-    "wrangler": "^4.0.0"
+    "typescript": "^5.6.0"
   },
   "repository": {
     "type": "git",
@@ -59,12 +34,5 @@
   },
   "homepage": "https://github.com/HiQ-AI/jimu-lca-mcp#readme",
   "bugs": "https://github.com/HiQ-AI/jimu-lca-mcp/issues",
-  "keywords": [
-    "mcp",
-    "lca",
-    "carbon-footprint",
-    "积木LCA",
-    "易碳",
-    "cortex"
-  ]
+  "private": true
 }
